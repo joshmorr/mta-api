@@ -11,7 +11,7 @@ import {
   isFeedStale,
   getLastSynced,
 } from './services/staticFeed';
-import { db } from './db/client';
+import { getDbCounts } from './db/queries/health';
 import { stopsRouter } from './routes/stops';
 import { arrivalsRouter } from './routes/arrivals';
 import { routesRouter } from './routes/routes';
@@ -38,21 +38,15 @@ app.route('/routes', vehiclesRouter);
 app.route('/alerts', alertsRouter);
 
 app.get('/health', (c) => {
-  const counts = db
-    .query<{ stops: number; routes: number }, []>(
-      `SELECT
-        (SELECT COUNT(*) FROM stops WHERE location_type = 1) as stops,
-        (SELECT COUNT(*) FROM routes) as routes`
-    )
-    .get();
+  const counts = getDbCounts();
 
   return c.json({
     status: 'ok',
     static_feeds: {
       subway: {
         last_synced: getLastSynced('subway'),
-        stop_count: counts?.stops ?? 0,
-        route_count: counts?.routes ?? 0,
+        stop_count: counts.stops,
+        route_count: counts.routes,
       },
       lirr: { last_synced: getLastSynced('lirr') },
       mnr: { last_synced: getLastSynced('mnr') },

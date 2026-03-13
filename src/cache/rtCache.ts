@@ -4,7 +4,14 @@ import type { FeedMessage } from '../types/gtfs';
 import { MTA_RT_BASE } from '../services/feedRouter';
 import { config } from '../config';
 
+interface CacheEntry {
+  feedMessage: FeedMessage;
+  fetchedAt: number;
+}
+
 let FeedMessageType: protobuf.Type;
+const cache = new Map<string, CacheEntry>();
+const pending = new Map<string, Promise<FeedMessage>>();
 
 async function getFeedMessageType(): Promise<protobuf.Type> {
   if (FeedMessageType) return FeedMessageType;
@@ -12,14 +19,6 @@ async function getFeedMessageType(): Promise<protobuf.Type> {
   FeedMessageType = root.lookupType('transit_realtime.FeedMessage');
   return FeedMessageType;
 }
-
-interface CacheEntry {
-  feedMessage: FeedMessage;
-  fetchedAt: number;
-}
-
-const cache = new Map<string, CacheEntry>();
-const pending = new Map<string, Promise<FeedMessage>>();
 
 async function fetchAndParse(feedPath: string): Promise<FeedMessage> {
   const url = `${MTA_RT_BASE}/${feedPath}`;
