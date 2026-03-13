@@ -1,6 +1,6 @@
 import { getFeed } from '../cache/rtCache';
 import { getFeedPath } from './feedRouter';
-import type { FeedMessage, VehiclePosition } from '../types/gtfs';
+import type { FeedMessage } from '../types/gtfs';
 import type { ArrivalResponse, Arrival, VehicleResponse } from '../types/api';
 import { db } from '../db/client';
 

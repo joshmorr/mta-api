@@ -4,7 +4,9 @@
     "dev": "bun run --hot src/index.ts",
     "start": "bun run src/index.ts",
     "build": "bun build src/index.ts --outdir dist --target bun",
-    "seed": "bun run scripts/seed.ts"
+    "seed": "bun run scripts/seed.ts",
+    "lint": "eslint src/**/*.ts scripts/**/*.ts",
+    "lint:fix": "eslint src/**/*.ts scripts/**/*.ts --fix"
   },
   "dependencies": {
     "fflate": "^0.8.2",
@@ -12,6 +14,10 @@
     "protobufjs": "^8.0.0"
   },
   "devDependencies": {
-    "@types/bun": "^1.3.10"
+    "@eslint/js": "^10.0.1",
+    "@types/bun": "^1.3.10",
+    "eslint": "^10.0.3",
+    "jiti": "^2.6.1",
+    "typescript-eslint": "^8.57.0"
   }
 }

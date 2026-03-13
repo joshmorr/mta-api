@@ -1,5 +1,5 @@
 import { getFeed } from '../cache/rtCache';
-import type { Alert, TranslatedString } from '../types/gtfs';
+import type { TranslatedString } from '../types/gtfs';
 import type { AlertResponse } from '../types/api';
 
 const ALERTS_FEED_PATH = 'camsys/all-alerts';

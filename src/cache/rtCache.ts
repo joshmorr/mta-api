@@ -10,6 +10,7 @@ interface CacheEntry {
 }
 
 let FeedMessageType: protobuf.Type;
+
 const cache = new Map<string, CacheEntry>();
 const pending = new Map<string, Promise<FeedMessage>>();
 
