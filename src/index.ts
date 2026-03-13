@@ -50,12 +50,12 @@ app.get('/health', (c) => {
     status: 'ok',
     static_feeds: {
       subway: {
-        last_synced:  getLastSynced('subway'),
-        stop_count:   counts?.stops ?? 0,
-        route_count:  counts?.routes ?? 0,
+        last_synced: getLastSynced('subway'),
+        stop_count: counts?.stops ?? 0,
+        route_count: counts?.routes ?? 0,
       },
       lirr: { last_synced: getLastSynced('lirr') },
-      mnr:  { last_synced: getLastSynced('mnr') },
+      mnr: { last_synced: getLastSynced('mnr') },
     },
   });
 });
