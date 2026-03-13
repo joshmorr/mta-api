@@ -1,6 +1,6 @@
 # deps
 node_modules/
 dist/
-data/          # SQLite DB files
+data/
 .env
 *.db
