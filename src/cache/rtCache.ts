@@ -9,16 +9,22 @@ interface CacheEntry {
   fetchedAt: number;
 }
 
-let FeedMessageType: protobuf.Type;
+let FeedMessageType: protobuf.Type | undefined;
+let feedMessageTypePromise: Promise<protobuf.Type> | undefined;
 
 const cache = new Map<string, CacheEntry>();
 const pending = new Map<string, Promise<FeedMessage>>();
 
-async function getFeedMessageType(): Promise<protobuf.Type> {
-  if (FeedMessageType) return FeedMessageType;
-  const root = await protobuf.load(join(import.meta.dir, '../proto/gtfs-realtime.proto'));
-  FeedMessageType = root.lookupType('transit_realtime.FeedMessage');
-  return FeedMessageType;
+function getFeedMessageType(): Promise<protobuf.Type> {
+  if (FeedMessageType) return Promise.resolve(FeedMessageType);
+  if (feedMessageTypePromise) return feedMessageTypePromise;
+  feedMessageTypePromise = protobuf
+    .load(join(import.meta.dir, '../proto/gtfs-realtime.proto'))
+    .then((root) => {
+      FeedMessageType = root.lookupType('transit_realtime.FeedMessage');
+      return FeedMessageType;
+    });
+  return feedMessageTypePromise;
 }
 
 async function fetchAndParse(feedPath: string): Promise<FeedMessage> {

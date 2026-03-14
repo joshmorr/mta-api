@@ -1,16 +1,11 @@
 import { Hono } from 'hono';
 import type { RouteResponse } from '../types/api';
 import { getAllRoutes, getRouteById } from '../db/queries/routes';
+import type { RouteRow, RouteTypeFilter } from '../db/queries/routes';
 
 export const routesRouter = new Hono();
 
-function toRouteResponse(r: {
-  route_id: string;
-  route_short_name: string;
-  route_long_name: string;
-  route_color: string;
-  route_type: number;
-}): RouteResponse {
+function toRouteResponse(r: RouteRow): RouteResponse {
   return {
     route_id:  r.route_id,
     name:      r.route_short_name,
@@ -21,17 +16,14 @@ function toRouteResponse(r: {
 }
 
 routesRouter.get('/', (c) => {
-  const typeFilter = c.req.query('type');
+  const typeQuery = c.req.query('type');
 
-  let typeCondition = '';
-  if (typeFilter === 'subway') typeCondition = `AND route_type = 1`;
-  else if (typeFilter === 'lirr') typeCondition = `AND route_type = 2 AND route_id LIKE 'LIRR%'`;
-  else if (typeFilter === 'mnr') typeCondition = `AND route_type = 2 AND route_id NOT LIKE 'LIRR%'`;
-  else if (typeFilter) {
-    return c.json({ error: `Unknown type: ${typeFilter}`, code: 'INVALID_PARAM' }, 400);
+  if (typeQuery && typeQuery !== 'subway' && typeQuery !== 'lirr' && typeQuery !== 'mnr') {
+    return c.json({ error: `Unknown type: ${typeQuery}`, code: 'INVALID_PARAM' }, 400);
   }
 
-  const routes: RouteResponse[] = getAllRoutes(typeCondition).map(toRouteResponse);
+  const type = typeQuery as RouteTypeFilter | undefined;
+  const routes: RouteResponse[] = getAllRoutes(type).map(toRouteResponse);
   return c.json({ routes });
 });
 
