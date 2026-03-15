@@ -22,7 +22,7 @@ function toNumber(val: number | { toNumber(): number } | undefined): number {
 export async function getArrivalsForStop(
   stopId: string,
   limit: number,
-  feedId?: FeedId,
+  feedId: FeedId,
   routeFilter?: string[]
 ): Promise<ArrivalResponse> {
   const stop = resolveStop(stopId, feedId);
@@ -119,14 +119,7 @@ export async function getArrivalsForStop(
   };
 }
 
-export async function getVehiclesForRoute(routeId: string): Promise<{
-  feed_id: FeedId;
-  route_id: string;
-  generated_at: number;
-  vehicles: VehicleResponse[];
-}>;
-
-export async function getVehiclesForRoute(routeId: string, feedId?: FeedId): Promise<{
+export async function getVehiclesForRoute(routeId: string, feedId: FeedId): Promise<{
   feed_id: FeedId;
   route_id: string;
   generated_at: number;
@@ -169,13 +162,10 @@ function resolvePlatformIds(feedId: FeedId, stopId: string): string[] {
   return [stopId];
 }
 
-function resolveStop(stopId: string, feedId?: FeedId) {
+function resolveStop(stopId: string, feedId: FeedId) {
   const matches = findStopsById(stopId, feedId);
   if (!matches.length) {
     throw new NotFoundError(`Stop ${stopId} not found`);
-  }
-  if (matches.length > 1) {
-    throw new AmbiguousEntityError(`Stop ${stopId} exists in multiple feeds`, matches.map((match) => match.feed_id));
   }
 
   const stop = matches[0];
@@ -188,13 +178,10 @@ function resolveStop(stopId: string, feedId?: FeedId) {
   return findStopsById(parentId, stop.feed_id)[0] ?? stop;
 }
 
-function resolveRoute(routeId: string, feedId?: FeedId) {
+function resolveRoute(routeId: string, feedId: FeedId) {
   const matches = findRoutesById(routeId, feedId);
   if (!matches.length) {
     throw new NotFoundError(`Route ${routeId} not found`);
-  }
-  if (matches.length > 1) {
-    throw new AmbiguousEntityError(`Route ${routeId} exists in multiple feeds`, matches.map((match) => match.feed_id));
   }
   return matches[0];
 }
@@ -203,16 +190,6 @@ export class NotFoundError extends Error {
   constructor(message: string) {
     super(message);
     this.name = 'NotFoundError';
-  }
-}
-
-export class AmbiguousEntityError extends Error {
-  feedIds: FeedId[];
-
-  constructor(message: string, feedIds: FeedId[]) {
-    super(message);
-    this.name = 'AmbiguousEntityError';
-    this.feedIds = feedIds;
   }
 }
 
