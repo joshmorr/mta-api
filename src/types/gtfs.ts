@@ -8,6 +8,7 @@ export interface GtfsStop {
 }
 
 export interface GtfsRoute {
+  agency_id?: string;
   route_id: string;
   route_short_name: string;
   route_long_name: string;
@@ -43,6 +44,14 @@ export interface GtfsCalendar {
   start_date: string;
   end_date: string;
 }
+
+export interface GtfsCalendarDate {
+  service_id: string;
+  date: string;
+  exception_type: string;
+}
+
+export type FeedId = 'subway' | 'lirr' | 'mnr';
 
 // GTFS-RT types (decoded from protobufjs)
 export interface FeedMessage {

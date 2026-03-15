@@ -42,14 +42,26 @@ app.get('/health', (c) => {
 
   return c.json({
     status: 'ok',
+    totals: {
+      stop_count: counts.totalStops,
+      route_count: counts.totalRoutes,
+    },
     static_feeds: {
       subway: {
         last_synced: getLastSynced('subway'),
-        stop_count: counts.stops,
-        route_count: counts.routes,
+        stop_count: counts.subwayStops,
+        route_count: counts.subwayRoutes,
       },
-      lirr: { last_synced: getLastSynced('lirr') },
-      mnr: { last_synced: getLastSynced('mnr') },
+      lirr: {
+        last_synced: getLastSynced('lirr'),
+        stop_count: counts.lirrStops,
+        route_count: counts.lirrRoutes,
+      },
+      mnr: {
+        last_synced: getLastSynced('mnr'),
+        stop_count: counts.mnrStops,
+        route_count: counts.mnrRoutes,
+      },
     },
   });
 });
@@ -62,7 +74,9 @@ async function start() {
 
   if (empty) {
     console.error('[startup] DB is empty — seeding all feeds before starting server...');
-    await Promise.all([syncSubwayFeed(), syncLirrFeed(), syncMnrFeed()]);
+    await syncSubwayFeed();
+    await syncLirrFeed();
+    await syncMnrFeed();
   } else {
     // Kick off stale refreshes in the background
     if (isFeedStale('subway', config.subwaySyncIntervalMs)) {

@@ -1,4 +1,7 @@
+export type FeedType = 'subway' | 'lirr' | 'mnr';
+
 export interface StopSummary {
+  feed_id: FeedType;
   stop_id: string;
   stop_name: string;
   lat: number;
@@ -12,6 +15,7 @@ export interface PlatformDetail {
 }
 
 export interface StopDetail {
+  feed_id: FeedType;
   stop_id: string;
   stop_name: string;
   lat: number;
@@ -20,6 +24,7 @@ export interface StopDetail {
 }
 
 export interface Arrival {
+  feed_id: FeedType;
   route_id: string;
   trip_id: string;
   arrival_time: number;
@@ -28,6 +33,7 @@ export interface Arrival {
 }
 
 export interface ArrivalResponse {
+  feed_id: FeedType;
   stop_id: string;
   stop_name: string;
   direction?: string;
@@ -38,14 +44,16 @@ export interface ArrivalResponse {
 }
 
 export interface RouteResponse {
+  feed_id: FeedType;
   route_id: string;
   name: string;
   long_name: string;
   color: string;
-  type: 'subway' | 'lirr' | 'mnr';
+  type: FeedType;
 }
 
 export interface VehicleResponse {
+  feed_id: FeedType;
   trip_id: string;
   current_stop_id: string;
   status: 'INCOMING_AT' | 'STOPPED_AT' | 'IN_TRANSIT_TO';

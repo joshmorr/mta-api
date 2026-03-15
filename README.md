@@ -3,6 +3,11 @@ To install dependencies:
 bun install
 ```
 
+To rebuild the local SQLite database and import all static feeds:
+```sh
+bun run seed
+```
+
 To run:
 ```sh
 bun run dev

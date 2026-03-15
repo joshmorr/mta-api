@@ -2,15 +2,18 @@
  * One-off script to seed the database from all static GTFS feeds.
  * Run with: bun run scripts/seed.ts
  */
-import { runMigrations } from '../src/db/client';
+import { resetStaticData, runMigrations } from '../src/db/client';
 import { syncSubwayFeed, syncLirrFeed, syncMnrFeed } from '../src/services/staticFeed';
 
 async function main() {
   console.error('[seed] Running migrations...');
   runMigrations();
+  resetStaticData();
 
   console.error('[seed] Downloading and importing all feeds (this may take a minute)...');
-  await Promise.all([syncSubwayFeed(), syncLirrFeed(), syncMnrFeed()]);
+  await syncSubwayFeed();
+  await syncLirrFeed();
+  await syncMnrFeed();
 
   console.error('[seed] Done.');
   process.exit(0);

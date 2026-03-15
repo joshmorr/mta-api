@@ -1,6 +1,8 @@
 import { db } from '../client';
 import type {
+  FeedId,
   GtfsCalendar,
+  GtfsCalendarDate,
   GtfsRoute,
   GtfsStop,
   GtfsStopTime,
@@ -9,16 +11,28 @@ import type {
 
 const BATCH_SIZE = 1000;
 
-export function upsertStops(rows: GtfsStop[]) {
+export function clearFeedData(feedId: FeedId) {
+  db.transaction(() => {
+    db.run(`DELETE FROM stop_times WHERE feed_id = ?`, [feedId]);
+    db.run(`DELETE FROM trips WHERE feed_id = ?`, [feedId]);
+    db.run(`DELETE FROM calendar_dates WHERE feed_id = ?`, [feedId]);
+    db.run(`DELETE FROM calendar WHERE feed_id = ?`, [feedId]);
+    db.run(`DELETE FROM routes WHERE feed_id = ?`, [feedId]);
+    db.run(`DELETE FROM stops WHERE feed_id = ?`, [feedId]);
+  })();
+}
+
+export function upsertStops(rows: GtfsStop[], feedId: FeedId) {
   const stmt = db.prepare(
-    `INSERT OR REPLACE INTO stops (stop_id, stop_name, stop_lat, stop_lon, location_type, parent_station)
-     VALUES ($stop_id, $stop_name, $stop_lat, $stop_lon, $location_type, $parent_station)`
+    `INSERT OR REPLACE INTO stops (feed_id, stop_id, stop_name, stop_lat, stop_lon, location_type, parent_station)
+     VALUES ($feed_id, $stop_id, $stop_name, $stop_lat, $stop_lon, $location_type, $parent_station)`
   );
   db.transaction(() => {
     for (let i = 0; i < rows.length; i += BATCH_SIZE) {
       for (const r of rows.slice(i, i + BATCH_SIZE)) {
         if (!r.stop_id) continue;
         stmt.run({
+          $feed_id:        feedId,
           $stop_id:        r.stop_id,
           $stop_name:      r.stop_name || r.stop_id,
           $stop_lat:       parseFloat(r.stop_lat) || null,
@@ -31,16 +45,18 @@ export function upsertStops(rows: GtfsStop[]) {
   })();
 }
 
-export function upsertRoutes(rows: GtfsRoute[]) {
+export function upsertRoutes(rows: GtfsRoute[], feedId: FeedId) {
   const stmt = db.prepare(
-    `INSERT OR REPLACE INTO routes (route_id, route_short_name, route_long_name, route_color, route_type)
-     VALUES ($route_id, $route_short_name, $route_long_name, $route_color, $route_type)`
+    `INSERT OR REPLACE INTO routes (feed_id, route_id, agency_id, route_short_name, route_long_name, route_color, route_type)
+     VALUES ($feed_id, $route_id, $agency_id, $route_short_name, $route_long_name, $route_color, $route_type)`
   );
   db.transaction(() => {
     for (const r of rows) {
       if (!r.route_id) continue;
       stmt.run({
+        $feed_id:         feedId,
         $route_id:         r.route_id,
+        $agency_id:        r.agency_id || null,
         $route_short_name: r.route_short_name,
         $route_long_name:  r.route_long_name,
         $route_color:      r.route_color ? `#${r.route_color}` : null,
@@ -50,16 +66,17 @@ export function upsertRoutes(rows: GtfsRoute[]) {
   })();
 }
 
-export function upsertTrips(rows: GtfsTrip[]) {
+export function upsertTrips(rows: GtfsTrip[], feedId: FeedId) {
   const stmt = db.prepare(
-    `INSERT OR REPLACE INTO trips (trip_id, route_id, service_id, direction_id, shape_id)
-     VALUES ($trip_id, $route_id, $service_id, $direction_id, $shape_id)`
+    `INSERT OR REPLACE INTO trips (feed_id, trip_id, route_id, service_id, direction_id, shape_id)
+     VALUES ($feed_id, $trip_id, $route_id, $service_id, $direction_id, $shape_id)`
   );
   db.transaction(() => {
     for (let i = 0; i < rows.length; i += BATCH_SIZE) {
       for (const r of rows.slice(i, i + BATCH_SIZE)) {
         if (!r.trip_id || !r.route_id) continue;
         stmt.run({
+          $feed_id:      feedId,
           $trip_id:      r.trip_id,
           $route_id:     r.route_id,
           $service_id:   r.service_id,
@@ -71,16 +88,17 @@ export function upsertTrips(rows: GtfsTrip[]) {
   })();
 }
 
-export function upsertStopTimes(rows: GtfsStopTime[]) {
+export function upsertStopTimes(rows: GtfsStopTime[], feedId: FeedId) {
   const stmt = db.prepare(
-    `INSERT OR REPLACE INTO stop_times (trip_id, stop_id, arrival_time, departure_time, stop_sequence)
-     VALUES ($trip_id, $stop_id, $arrival_time, $departure_time, $stop_sequence)`
+    `INSERT OR REPLACE INTO stop_times (feed_id, trip_id, stop_id, arrival_time, departure_time, stop_sequence)
+     VALUES ($feed_id, $trip_id, $stop_id, $arrival_time, $departure_time, $stop_sequence)`
   );
   db.transaction(() => {
     for (let i = 0; i < rows.length; i += BATCH_SIZE) {
       for (const r of rows.slice(i, i + BATCH_SIZE)) {
         if (!r.trip_id || !r.stop_id) continue;
         stmt.run({
+          $feed_id:        feedId,
           $trip_id:        r.trip_id,
           $stop_id:        r.stop_id,
           $arrival_time:   r.arrival_time || null,
@@ -92,17 +110,18 @@ export function upsertStopTimes(rows: GtfsStopTime[]) {
   })();
 }
 
-export function upsertCalendar(rows: GtfsCalendar[]) {
+export function upsertCalendar(rows: GtfsCalendar[], feedId: FeedId) {
   const stmt = db.prepare(
     `INSERT OR REPLACE INTO calendar
-       (service_id, monday, tuesday, wednesday, thursday, friday, saturday, sunday, start_date, end_date)
+       (feed_id, service_id, monday, tuesday, wednesday, thursday, friday, saturday, sunday, start_date, end_date)
      VALUES
-       ($service_id, $monday, $tuesday, $wednesday, $thursday, $friday, $saturday, $sunday, $start_date, $end_date)`
+       ($feed_id, $service_id, $monday, $tuesday, $wednesday, $thursday, $friday, $saturday, $sunday, $start_date, $end_date)`
   );
   db.transaction(() => {
     for (const r of rows) {
       if (!r.service_id) continue;
       stmt.run({
+        $feed_id:    feedId,
         $service_id: r.service_id,
         $monday:     parseInt(r.monday),
         $tuesday:    parseInt(r.tuesday),
@@ -113,6 +132,24 @@ export function upsertCalendar(rows: GtfsCalendar[]) {
         $sunday:     parseInt(r.sunday),
         $start_date: r.start_date,
         $end_date:   r.end_date,
+      });
+    }
+  })();
+}
+
+export function upsertCalendarDates(rows: GtfsCalendarDate[], feedId: FeedId) {
+  const stmt = db.prepare(
+    `INSERT OR REPLACE INTO calendar_dates (feed_id, service_id, date, exception_type)
+     VALUES ($feed_id, $service_id, $date, $exception_type)`
+  );
+  db.transaction(() => {
+    for (const r of rows) {
+      if (!r.service_id || !r.date) continue;
+      stmt.run({
+        $feed_id:        feedId,
+        $service_id:     r.service_id,
+        $date:           r.date,
+        $exception_type: parseInt(r.exception_type) || 0,
       });
     }
   })();
