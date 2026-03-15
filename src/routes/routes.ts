@@ -18,7 +18,7 @@ function toRouteResponse(r: RouteRow): RouteResponse {
 routesRouter.get('/', (c) => {
   const typeQuery = c.req.query('type');
 
-  if (typeQuery && typeQuery !== 'subway' && typeQuery !== 'lirr' && typeQuery !== 'mnr') {
+  if (typeQuery && !['subway', 'lirr', 'mnr'].includes(typeQuery)) {
     return c.json({ error: `Unknown type: ${typeQuery}`, code: 'INVALID_PARAM' }, 400);
   }
 

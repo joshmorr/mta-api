@@ -2,7 +2,12 @@ import { getFeed } from '../cache/rtCache';
 import { getFeedPath } from './feedRouter';
 import type { FeedMessage } from '../types/gtfs';
 import type { ArrivalResponse, Arrival, VehicleResponse } from '../types/api';
-import { db } from '../db/client';
+import {
+  getChildPlatformIds,
+  getServedRouteIdsByStopIds,
+  getStopNameById,
+  isPlatformStop,
+} from '../db/queries/realtimeFeed';
 
 function toNumber(val: number | { toNumber(): number } | undefined): number {
   if (val === undefined) return 0;
@@ -18,25 +23,12 @@ export async function getArrivalsForStop(
   // Resolve platform IDs (handles both parent station and platform IDs)
   const platformIds = resolvePlatformIds(stopId);
 
-  const stopRow = db
-    .query<{ stop_name: string }, string>(
-      `SELECT stop_name FROM stops WHERE stop_id = ?`
-    )
-    .get(stopId);
+  const stopName = getStopNameById(stopId);
 
-  if (!stopRow) throw new NotFoundError(`Stop ${stopId} not found`);
+  if (!stopName) throw new NotFoundError(`Stop ${stopId} not found`);
 
   // Find which routes serve these stops
-  const placeholders = platformIds.map(() => '?').join(',');
-  const servedRoutes = db
-    .query<{ route_id: string }, string[]>(
-      `SELECT DISTINCT t.route_id
-       FROM stop_times st
-       JOIN trips t ON t.trip_id = st.trip_id
-       WHERE st.stop_id IN (${placeholders})`
-    )
-    .all(...platformIds)
-    .map((r) => r.route_id);
+  const servedRoutes = getServedRouteIdsByStopIds(platformIds);
 
   const routesToQuery = routeFilter
     ? servedRoutes.filter((r) => routeFilter.includes(r))
@@ -106,7 +98,7 @@ export async function getArrivalsForStop(
 
   return {
     stop_id: stopId,
-    stop_name: stopRow.stop_name,
+    stop_name: stopName,
     generated_at: now,
     stale: overallStale,
     ...(overallFeedError ? { feed_error: overallFeedError } : {}),
@@ -144,21 +136,10 @@ export async function getVehiclesForRoute(routeId: string): Promise<{
 
 function resolvePlatformIds(stopId: string): string[] {
   // If it's already a directional stop (ends in N/S or similar), return as-is
-  const directional = db
-    .query<{ stop_id: string }, string>(
-      `SELECT stop_id FROM stops WHERE stop_id = ? AND location_type = 0`
-    )
-    .get(stopId);
-
-  if (directional) return [stopId];
+  if (isPlatformStop(stopId)) return [stopId];
 
   // Otherwise, treat as parent station and get child platforms
-  const platforms = db
-    .query<{ stop_id: string }, string>(
-      `SELECT stop_id FROM stops WHERE parent_station = ? AND location_type = 0`
-    )
-    .all(stopId)
-    .map((r) => r.stop_id);
+  const platforms = getChildPlatformIds(stopId);
 
   if (platforms.length > 0) return platforms;
 
