@@ -28,7 +28,7 @@ function getFeedMessageType(): Promise<protobuf.Type> {
 }
 
 async function fetchAndParse(feedPath: string): Promise<FeedMessage> {
-  const url = `${MTA_RT_BASE}/${feedPath}`;
+  const url = `${MTA_RT_BASE}/${encodeURIComponent(feedPath)}`;
   const response = await fetch(url);
   if (!response.ok) {
     throw new Error(`MTA feed ${feedPath} returned HTTP ${response.status}`);
