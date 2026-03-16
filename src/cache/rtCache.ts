@@ -1,7 +1,7 @@
 import * as protobuf from 'protobufjs';
 import { join } from 'path';
 import type { FeedMessage } from '../types/gtfs';
-import { MTA_RT_BASE } from '../services/feedRouter';
+import { MTA_RT_BASE } from '../services/feed.service';
 import { config } from '../config';
 
 interface CacheEntry {

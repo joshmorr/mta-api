@@ -1,20 +1,8 @@
 import { getFeed } from '../cache/rtCache';
-import type { TranslatedString } from '../types/gtfs';
 import type { AlertResponse } from '../types/api';
+import { toNumber, getEnglishText } from '../utils/realtime';
 
 const ALERTS_FEED_PATH = 'camsys/all-alerts';
-
-function toNumber(val: number | { toNumber(): number } | undefined): number {
-  if (val === undefined) return 0;
-  if (typeof val === 'object') return val.toNumber();
-  return val;
-}
-
-function getEnglishText(ts: TranslatedString | undefined): string {
-  if (!ts) return '';
-  const en = ts.translation.find((t) => t.language === 'en' || !t.language);
-  return en?.text ?? '';
-}
 
 export async function fetchAlerts(): Promise<{
   generated_at: number;

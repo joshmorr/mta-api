@@ -10,15 +10,12 @@ import {
   isDbEmpty,
   isFeedStale,
   getLastSynced,
-} from './services/staticFeed';
+} from './services/static.service';
 import { getDbCounts } from './db/queries/health';
-import { stopsRouter } from './routes/stopsList';
-import { feedStopsRouter } from './routes/feedStopDetails';
-import { arrivalsRouter } from './routes/feedStopArrivals';
-import { routesRouter } from './routes/routesList';
-import { feedRoutesRouter } from './routes/feedRouteDetails';
-import { vehiclesRouter } from './routes/feedRouteVehicles';
-import { alertsRouter } from './routes/alerts';
+import { stopsRouter } from './routes/stops.routes';
+import { routesRouter } from './routes/routes.routes';
+import { feedsRouter } from './routes/feeds.routes';
+import { alertsRouter } from './routes/alerts.routes';
 
 const app = new Hono();
 
@@ -35,10 +32,7 @@ app.notFound((c) => c.json({ error: 'Not found', code: 'NOT_FOUND' }, 404));
 // Routes
 app.route('/stops', stopsRouter);
 app.route('/routes', routesRouter);
-app.route('/feeds', feedStopsRouter);
-app.route('/feeds', arrivalsRouter);
-app.route('/feeds', feedRoutesRouter);
-app.route('/feeds', vehiclesRouter);
+app.route('/feeds', feedsRouter);
 app.route('/alerts', alertsRouter);
 
 app.get('/health', (c) => {

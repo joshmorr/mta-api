@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { fetchAlerts } from '../services/alertsFeed';
+import { fetchAlerts } from '../services/alerts.service';
 
 export const alertsRouter = new Hono();
 

@@ -6,7 +6,7 @@ import {
   getAllStops,
   getPlatformIds,
 } from '../db/queries/stops';
-import { parseFeedId } from './feedParams';
+import { parseFeedId } from '../utils/feedParams';
 
 export const stopsRouter = new Hono();
 

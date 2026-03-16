@@ -1,5 +1,5 @@
 import { getFeed } from '../cache/rtCache';
-import { getFeedPath } from './feedRouter';
+import { getFeedPath } from './feed.service';
 import type { FeedId, FeedMessage } from '../types/gtfs';
 import type { ArrivalResponse, Arrival, VehicleResponse } from '../types/api';
 import {
@@ -12,12 +12,7 @@ import {
 } from '../db/queries/realtimeFeed';
 import { findRoutesById } from '../db/queries/routes';
 import { findStopsById, getParentId } from '../db/queries/stops';
-
-function toNumber(val: number | { toNumber(): number } | undefined): number {
-  if (val === undefined) return 0;
-  if (typeof val === 'object') return val.toNumber();
-  return val;
-}
+import { toNumber } from '../utils/realtime';
 
 export async function getArrivalsForStop(
   stopId: string,
