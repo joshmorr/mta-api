@@ -3,7 +3,7 @@
  * Run with: bun run scripts/seed.ts
  */
 import { resetStaticData, runMigrations } from '../src/db/client';
-import { syncSubwayFeed, syncLirrFeed, syncMnrFeed } from '../src/services/staticFeed';
+import { syncSubwayFeed, syncLirrFeed, syncMnrFeed } from '../src/services/static.service';
 
 async function main() {
   console.error('[seed] Running migrations...');
