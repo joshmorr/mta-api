@@ -92,7 +92,6 @@ feedsRouter.get('/:feed_id/routes/:route_id', (c) => {
     name: route.route_short_name ?? route.route_long_name ?? route.route_id,
     long_name: route.route_long_name ?? route.route_short_name ?? route.route_id,
     color: route.route_color ?? '',
-    type: route.feed_id,
   };
 
   return c.json(response);

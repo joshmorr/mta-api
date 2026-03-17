@@ -49,7 +49,6 @@ export interface RouteResponse {
   name: string;
   long_name: string;
   color: string;
-  type: FeedType;
 }
 
 export interface VehicleResponse {

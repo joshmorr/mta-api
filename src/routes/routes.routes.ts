@@ -12,7 +12,6 @@ function toRouteResponse(r: RouteRow): RouteResponse {
     name:      r.route_short_name ?? r.route_long_name ?? r.route_id,
     long_name: r.route_long_name ?? r.route_short_name ?? r.route_id,
     color:     r.route_color ?? '',
-    type:      r.feed_id,
   };
 }
 
