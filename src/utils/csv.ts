@@ -41,5 +41,5 @@ function splitCSVLine(line: string): string[] {
 }
 
 function normalizeCSVCell(value: string): string {
-  return value.trim().replace(/^"|"$/g, '');
+  return value.trim();
 }
