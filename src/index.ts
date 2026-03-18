@@ -14,7 +14,8 @@ import {
 import { getDbCounts } from './db/queries/health';
 import { stopsRouter } from './routes/stops.routes';
 import { routesRouter } from './routes/routes.routes';
-import { feedsRouter } from './routes/feeds.routes';
+import { arrivalsRouter } from './routes/arrivals.routes';
+import { vehiclesRouter } from './routes/vehicles.routes';
 import { alertsRouter } from './routes/alerts.routes';
 
 const app = new Hono();
@@ -32,7 +33,8 @@ app.notFound((c) => c.json({ error: 'Not found', code: 'NOT_FOUND' }, 404));
 // Routes
 app.route('/stops', stopsRouter);
 app.route('/routes', routesRouter);
-app.route('/feeds', feedsRouter);
+app.route('/arrivals', arrivalsRouter);
+app.route('/vehicles', vehiclesRouter);
 app.route('/alerts', alertsRouter);
 
 app.get('/health', (c) => {

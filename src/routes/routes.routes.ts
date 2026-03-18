@@ -1,7 +1,8 @@
 import { Hono } from 'hono';
 import type { RouteResponse } from '../types/api';
-import { getAllRoutes } from '../db/queries/routes';
+import { getAllRoutes, getRouteById } from '../db/queries/routes';
 import type { RouteRow, RouteTypeFilter } from '../db/queries/routes';
+import { parseFeedId } from '../utils/feedParams';
 
 export const routesRouter = new Hono();
 
@@ -16,13 +17,43 @@ function toRouteResponse(r: RouteRow): RouteResponse {
 }
 
 routesRouter.get('/', (c) => {
-  const typeQuery = c.req.query('type');
+  const feed = c.req.query('feed');
 
-  if (typeQuery && !['subway', 'lirr', 'mnr'].includes(typeQuery)) {
-    return c.json({ error: `Unknown type: ${typeQuery}`, code: 'INVALID_PARAM' }, 400);
+  if (feed && !['subway', 'lirr', 'mnr'].includes(feed)) {
+    return c.json({ error: `Unknown feed: ${feed}`, code: 'INVALID_PARAM' }, 400);
   }
 
-  const type = typeQuery as RouteTypeFilter | undefined;
+  const type = feed as RouteTypeFilter | undefined;
   const routes: RouteResponse[] = getAllRoutes(type).map(toRouteResponse);
   return c.json({ routes });
+});
+
+routesRouter.get('/:route_id', (c) => {
+  const routeId = c.req.param('route_id');
+  const feedRaw = c.req.query('feed');
+  const feedId  = parseFeedId(feedRaw);
+
+  if (!feedRaw) {
+    return c.json({ error: 'feed is required', code: 'INVALID_PARAM' }, 400);
+  }
+
+  if (!feedId) {
+    return c.json({ error: 'feed must be one of subway, lirr, mnr', code: 'INVALID_PARAM' }, 400);
+  }
+
+  const route = getRouteById(routeId, feedId);
+
+  if (!route) {
+    return c.json({ error: `Route ${routeId} not found`, code: 'NOT_FOUND' }, 404);
+  }
+
+  const response: RouteResponse = {
+    feed_id:   route.feed_id,
+    route_id:  route.route_id,
+    name:      route.route_short_name ?? route.route_long_name ?? route.route_id,
+    long_name: route.route_long_name ?? route.route_short_name ?? route.route_id,
+    color:     route.route_color ?? '',
+  };
+
+  return c.json(response);
 });

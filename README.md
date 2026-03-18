@@ -48,7 +48,7 @@ All responses are `application/json`. Errors follow a consistent shape:
 
 ### Feed scoping
 
-The MTA reuses raw GTFS IDs across subway, LIRR, and Metro-North (e.g. `stop_id=1` and `route_id=1` exist in multiple feeds). Collection endpoints remain cross-feed by default. ID-based detail endpoints are feed-scoped and use `/feeds/:feed_id/...` so the resource identity is unambiguous.
+The MTA reuses raw GTFS IDs across subway, LIRR, and Metro-North (e.g. `stop_id=1` and `route_id=1` exist in multiple feeds). Collection endpoints (`GET /stops`, `GET /routes`) are cross-feed by default and accept an optional `?feed=` filter. All other endpoints require `?feed=` because IDs are only unique within a feed.
 
 ---
 
@@ -61,13 +61,13 @@ List or search stops.
 | `q` | string | — | Name search (partial, case-insensitive) |
 | `lat` + `lon` | number | — | Proximity search centre |
 | `radius` | number | `400` | Radius in metres (max 1600) |
-| `feed_id` | string | all | Filter to `subway`, `lirr`, or `mnr` |
+| `feed` | string | all | Filter to `subway`, `lirr`, or `mnr` |
 | `limit` | number | `20` | Max results (max 50) |
 
 ```
 GET /stops?q=times+sq
 GET /stops?lat=40.7553&lon=-73.9873&radius=400
-GET /stops?feed_id=lirr&limit=50
+GET /stops?feed=lirr&limit=50
 ```
 
 ```json
@@ -89,14 +89,14 @@ GET /stops?feed_id=lirr&limit=50
 
 ---
 
-### `GET /feeds/:feed_id/stops/:stop_id`
+### `GET /stops/:stop_id`
 
-Get a single stop. Accepts parent station IDs or platform IDs.
+Get a single stop. Accepts parent station IDs or platform IDs. `feed` is required.
 
 ```
-GET /feeds/subway/stops/127
-GET /feeds/subway/stops/127N
-GET /feeds/lirr/stops/1
+GET /stops/127?feed=subway
+GET /stops/127N?feed=subway
+GET /stops/1?feed=lirr
 ```
 
 ```json
@@ -115,19 +115,21 @@ GET /feeds/lirr/stops/1
 
 ---
 
-### `GET /feeds/:feed_id/stops/:stop_id/arrivals`
+### `GET /arrivals`
 
-Live arrivals at a stop, sourced from GTFS-RT feeds filtered against the active service calendar.
+Live arrivals at a stop, sourced from GTFS-RT feeds filtered against the active service calendar. `stop` and `feed` are required.
 
 | Param | Type | Default | Description |
 |-------|------|---------|-------------|
+| `stop` | string | **required** | Platform or parent station ID, e.g. `127N` |
+| `feed` | string | **required** | One of `subway`, `lirr`, `mnr` |
 | `limit` | number | `5` | Max arrivals (max 50) |
 | `routes` | string | all | Comma-separated route filter, e.g. `1,2,3` |
 
 ```
-GET /feeds/subway/stops/127N/arrivals
-GET /feeds/subway/stops/127N/arrivals?limit=3&routes=1,2
-GET /feeds/lirr/stops/1/arrivals
+GET /arrivals?stop=127N&feed=subway
+GET /arrivals?stop=127N&feed=subway&limit=3&routes=1,2
+GET /arrivals?stop=1&feed=lirr
 ```
 
 ```json
@@ -160,11 +162,11 @@ List all routes.
 
 | Param | Type | Description |
 |-------|------|-------------|
-| `type` | string | Filter to `subway`, `lirr`, or `mnr` |
+| `feed` | string | Filter to `subway`, `lirr`, or `mnr` |
 
 ```
 GET /routes
-GET /routes?type=lirr
+GET /routes?feed=lirr
 ```
 
 ```json
@@ -184,23 +186,28 @@ GET /routes?type=lirr
 
 ---
 
-### `GET /feeds/:feed_id/routes/:route_id`
+### `GET /routes/:route_id`
 
-Get a single route.
+Get a single route. `feed` is required.
 
 ```
-GET /feeds/subway/routes/A
-GET /feeds/lirr/routes/1
+GET /routes/A?feed=subway
+GET /routes/1?feed=lirr
 ```
 
 ---
 
-### `GET /feeds/:feed_id/routes/:route_id/vehicles`
+### `GET /vehicles`
 
-Live vehicle positions for a route.
+Live vehicle positions for a route. `route` and `feed` are required.
+
+| Param | Type | Description |
+|-------|------|-------------|
+| `route` | string | **required** | Route ID, e.g. `L` |
+| `feed` | string | **required** | One of `subway`, `lirr`, `mnr` |
 
 ```
-GET /feeds/subway/routes/L/vehicles
+GET /vehicles?route=L&feed=subway
 ```
 
 ```json
@@ -208,7 +215,6 @@ GET /feeds/subway/routes/L/vehicles
   "feed_id": "subway",
   "route_id": "L",
   "generated_at": 1773605400,
-  "stale": false,
   "vehicles": [
     {
       "feed_id": "subway",
