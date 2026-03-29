@@ -1,4 +1,5 @@
-import { Hono } from 'hono';
+import { OpenAPIHono } from '@hono/zod-openapi';
+import { swaggerUI } from '@hono/swagger-ui';
 import { logger } from 'hono/logger';
 import { timing } from 'hono/timing';
 import { runMigrations } from './db/client';
@@ -18,7 +19,7 @@ import { arrivalsRouter } from './routes/arrivals.routes';
 import { vehiclesRouter } from './routes/vehicles.routes';
 import { alertsRouter } from './routes/alerts.routes';
 
-const app = new Hono();
+const app = new OpenAPIHono();
 
 app.use('*', logger());
 app.use('*', timing());
@@ -66,6 +67,20 @@ app.get('/health', (c) => {
   });
 });
 
+// OpenAPI spec
+app.doc('/doc', {
+  openapi: '3.0.0',
+  info: {
+    title: 'MTA API',
+    version: '1.0.0',
+    description: 'REST API for NYC MTA transit data — subway, LIRR, and Metro-North routes, stops, arrivals, vehicles, and service alerts.',
+  },
+  servers: [{ url: `http://${config.host}:${config.port}`, description: 'Local' }],
+});
+
+// Swagger UI
+app.get('/ui', swaggerUI({ url: '/doc' }));
+
 // Startup
 async function start() {
   runMigrations();
@@ -78,7 +93,6 @@ async function start() {
     await syncLirrFeed();
     await syncMnrFeed();
   } else {
-    // Kick off stale refreshes in the background
     if (isFeedStale('subway', config.subwaySyncIntervalMs)) {
       syncSubwayFeed().catch((e) => console.error('[startup] subway sync error:', e));
     }
@@ -90,7 +104,6 @@ async function start() {
     }
   }
 
-  // Schedule ongoing refreshes
   setInterval(() => {
     syncSubwayFeed().catch((e) => console.error('[sync] subway error:', e));
   }, config.subwaySyncIntervalMs);
@@ -113,4 +126,3 @@ export default {
   hostname: config.host,
   fetch: app.fetch,
 };
-

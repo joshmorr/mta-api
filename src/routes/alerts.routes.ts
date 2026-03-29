@@ -1,9 +1,28 @@
-import { Hono } from 'hono';
+import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi';
 import { fetchAlerts } from '../services/alerts.service';
+import { AlertListResponseSchema, ErrorSchema } from '../schemas/api';
 
-export const alertsRouter = new Hono();
+export const alertsRouter = new OpenAPIHono();
 
-alertsRouter.get('/', async (c) => {
+const getAlertsRoute = createRoute({
+  method: 'get',
+  path: '/',
+  tags: ['Alerts'],
+  summary: 'Get service alerts',
+  description: 'Returns active MTA service alerts, optionally filtered by route or stop.',
+  request: {
+    query: z.object({
+      routes: z.string().optional().openapi({ description: 'Comma-separated route IDs to filter alerts by', example: 'A,C' }),
+      stop_id: z.string().optional().openapi({ description: 'Filter alerts affecting a specific stop', example: '127' }),
+    }),
+  },
+  responses: {
+    200: { content: { 'application/json': { schema: AlertListResponseSchema } }, description: 'Service alerts' },
+    503: { content: { 'application/json': { schema: ErrorSchema } }, description: 'Alerts feed unavailable' },
+  },
+});
+
+alertsRouter.openapi(getAlertsRoute, async (c) => {
   const routesParam = c.req.query('routes');
   const stopId      = c.req.query('stop_id');
   const routeFilter = routesParam
@@ -28,10 +47,8 @@ alertsRouter.get('/', async (c) => {
       stale,
       ...(feed_error ? { feed_error } : {}),
       alerts: filtered,
-    });
+    }, 200 as const);
   } catch {
-    return c.json({ error: 'Alerts feed unavailable', code: 'FEED_ERROR' }, 503, {
-      'Retry-After': '30',
-    });
+    return c.json({ error: 'Alerts feed unavailable', code: 'FEED_ERROR' }, 503 as const);
   }
 });

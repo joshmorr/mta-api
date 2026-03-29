@@ -313,32 +313,3 @@ Fetched on demand, cached per feed path, with promise deduplication to prevent c
 | LIRR | `lirr/gtfs-lirr` |
 | Metro-North | `mnr/gtfs-mnr` |
 | All alerts | `camsys/all-alerts` |
-
----
-
-## Project structure
-
-```
-src/
-  index.ts              # App entry, route registration, startup sequence
-  config.ts             # Env var config
-  routes/               # Hono route handlers
-  services/             # Business logic (RT feed, static feed, alerts, feed routing)
-  db/
-    client.ts           # bun:sqlite connection, migrations, schema helpers
-    schema.ts           # CREATE TABLE DDL
-    queries/            # Typed query functions per domain
-  cache/
-    rtCache.ts          # In-memory RT feed cache with TTL + promise deduplication
-  proto/
-    gtfs-realtime.proto # Standard GTFS-RT proto definition
-  types/
-    gtfs.ts             # GTFS and FeedId types
-    api.ts              # Request/response types
-scripts/
-  seed.ts               # One-off: download + import all static feeds
-data/
-  feeds/                # Static GTFS ZIPs (subway, lirr, mnr)
-  mta.db                # SQLite database (git-ignored)
-```
-
