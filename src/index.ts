@@ -4,12 +4,7 @@ import { logger } from 'hono/logger';
 import { timing } from 'hono/timing';
 import { config } from './config';
 import { startup } from './startup';
-import { stopsRouter } from './routes/stops.routes';
-import { routesRouter } from './routes/routes.routes';
-import { arrivalsRouter } from './routes/arrivals.routes';
-import { vehiclesRouter } from './routes/vehicles.routes';
-import { alertsRouter } from './routes/alerts.routes';
-import { healthRouter } from './routes/health.routes';
+import { stopsRouter, routesRouter, arrivalsRouter, vehiclesRouter, alertsRouter, healthRouter } from './routes';
 
 const app = new OpenAPIHono();
 
