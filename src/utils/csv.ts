@@ -1,19 +1,42 @@
 export function parseCSV(text: string): Record<string, string>[] {
-  const lines = text.split('\n');
-  if (lines.length < 2) return [];
-  const headers = splitCSVLine(lines[0].replace(/\r/, '')).map(normalizeCSVCell);
   const rows: Record<string, string>[] = [];
-  for (let i = 1; i < lines.length; i++) {
-    const line = lines[i].replace(/\r/, '');
+  forEachCSVRow(text, (row) => { rows.push(row); });
+  return rows;
+}
+
+/**
+ * Iterate over CSV rows one at a time, calling `cb` for each.
+ * Avoids building a full array — useful for large files where the
+ * caller can process (e.g. batch-insert) and discard each row.
+ */
+export function forEachCSVRow(
+  text: string,
+  cb: (row: Record<string, string>) => void,
+): number {
+  let pos = 0;
+  let count = 0;
+
+  // Find first newline to extract header
+  const firstNl = text.indexOf('\n', pos);
+  if (firstNl === -1) return 0;
+  const headers = splitCSVLine(text.slice(pos, firstNl).replace(/\r/, '')).map(normalizeCSVCell);
+  pos = firstNl + 1;
+
+  while (pos < text.length) {
+    const nl = text.indexOf('\n', pos);
+    const end = nl === -1 ? text.length : nl;
+    const line = text.slice(pos, end).replace(/\r/, '');
+    pos = end + 1;
     if (!line) continue;
     const vals = splitCSVLine(line).map(normalizeCSVCell);
     const row: Record<string, string> = {};
     for (let j = 0; j < headers.length; j++) {
       row[headers[j]] = vals[j] ?? '';
     }
-    rows.push(row);
+    cb(row);
+    count++;
   }
-  return rows;
+  return count;
 }
 
 function splitCSVLine(line: string): string[] {

@@ -110,6 +110,43 @@ export function upsertStopTimes(rows: GtfsStopTime[], feedId: FeedId) {
   })();
 }
 
+/**
+ * Returns push/flush callbacks for inserting stop_times in batches,
+ * so the full row array never needs to exist in memory.
+ */
+export function upsertStopTimesBatch(feedId: FeedId) {
+  const stmt = db.prepare(
+    `INSERT OR REPLACE INTO stop_times (feed_id, trip_id, stop_id, arrival_time, departure_time, stop_sequence)
+     VALUES ($feed_id, $trip_id, $stop_id, $arrival_time, $departure_time, $stop_sequence)`
+  );
+  const batch: GtfsStopTime[] = [];
+
+  const flushBatch = db.transaction(() => {
+    for (const r of batch) {
+      stmt.run({
+        $feed_id:        feedId,
+        $trip_id:        r.trip_id,
+        $stop_id:        r.stop_id,
+        $arrival_time:   r.arrival_time || null,
+        $departure_time: r.departure_time || null,
+        $stop_sequence:  parseInt(r.stop_sequence) || 0,
+      });
+    }
+    batch.length = 0;
+  });
+
+  return {
+    push(row: GtfsStopTime) {
+      if (!row.trip_id || !row.stop_id) return;
+      batch.push(row);
+      if (batch.length >= BATCH_SIZE) flushBatch();
+    },
+    flush() {
+      if (batch.length) flushBatch();
+    },
+  };
+}
+
 export function upsertCalendar(rows: GtfsCalendar[], feedId: FeedId) {
   const stmt = db.prepare(
     `INSERT OR REPLACE INTO calendar

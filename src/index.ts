@@ -4,12 +4,19 @@ import { logger } from 'hono/logger';
 import { timing } from 'hono/timing';
 import { config } from './config';
 import { startup } from './startup';
+import { state } from './state';
 import { stopsRouter, routesRouter, arrivalsRouter, vehiclesRouter, alertsRouter, healthRouter } from './routes';
 
 const app = new OpenAPIHono();
 
 app.use('*', logger());
 app.use('*', timing());
+app.use('*', async (c, next) => {
+  if (state.seeding && c.req.path !== '/health') {
+    return c.json({ error: 'Service is seeding initial data', code: 'SEEDING' }, 503);
+  }
+  await next();
+});
 
 app.onError((err, c) => {
   console.error(err);

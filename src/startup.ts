@@ -7,15 +7,19 @@ import {
   isDbEmpty,
   isFeedStale,
 } from './services/static.service';
+import { state } from './state';
 
 export async function startup() {
   runMigrations();
 
   if (isDbEmpty()) {
-    console.error('[startup] DB is empty — seeding all feeds before starting server...');
-    await syncSubwayFeed();
-    await syncLirrFeed();
-    await syncMnrFeed();
+    console.log('[startup] DB is empty — seeding all feeds in background...');
+    state.seeding = true;
+    syncSubwayFeed()
+      .then(() => syncLirrFeed())
+      .then(() => syncMnrFeed())
+      .catch((e) => console.error('[startup] initial seed error:', e))
+      .finally(() => { state.seeding = false; });
   } else {
     if (isFeedStale('subway', config.subwaySyncIntervalMs)) {
       syncSubwayFeed().catch((e) => console.error('[startup] subway sync error:', e));
