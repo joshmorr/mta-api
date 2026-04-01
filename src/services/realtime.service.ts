@@ -188,7 +188,7 @@ export class NotFoundError extends Error {
   }
 }
 
-function getRelevantServiceDates(now: Date = new Date()): ServiceDateFilter[] {
+export function getRelevantServiceDates(now: Date = new Date()): ServiceDateFilter[] {
   const current = getNyDateParts(now);
   const serviceDates: ServiceDateFilter[] = [
     {
@@ -211,7 +211,7 @@ function getRelevantServiceDates(now: Date = new Date()): ServiceDateFilter[] {
   return serviceDates;
 }
 
-function getNyDateParts(date: Date): {
+export function getNyDateParts(date: Date): {
   date: string;
   weekdayColumn: WeekdayColumn;
   hour: number;
