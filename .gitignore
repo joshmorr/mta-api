@@ -1,7 +1,5 @@
 node_modules/
 dist/
 data/
-.*
-!.gitignore
-!.oxlintrc.json
-!.dockerignore
+.claude
+.local
