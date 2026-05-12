@@ -6,7 +6,9 @@
     "build": "bun build src/index.ts --outdir dist --target bun",
     "seed": "bun run scripts/seed.ts",
     "lint": "oxlint src/ scripts/",
-    "lint:fix": "oxlint --fix src/ scripts/"
+    "lint:fix": "oxlint --fix src/ scripts/",
+    "test": "bun test",
+    "test:coverage": "bun test --coverage"
   },
   "dependencies": {
     "@hono/swagger-ui": "^0.6.1",
