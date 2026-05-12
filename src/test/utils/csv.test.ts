@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { parseCSV } from '../../utils/csv';
+import { parseCSV, forEachCSVRow } from '../../utils/csv';
 
 describe('parseCSV', () => {
   it('parses a simple CSV with headers and one row', () => {
@@ -69,5 +69,44 @@ describe('parseCSV', () => {
     expect(result).toHaveLength(2);
     expect(result[0].stop_id).toBe('101');
     expect(result[1].parent_station).toBe('101');
+  });
+});
+
+describe('forEachCSVRow', () => {
+  it('invokes the callback once per data row and returns the count', () => {
+    const rows: Record<string, string>[] = [];
+    const count = forEachCSVRow('a,b\n1,2\n3,4\n5,6', (row) => rows.push(row));
+    expect(count).toBe(3);
+    expect(rows).toEqual([
+      { a: '1', b: '2' },
+      { a: '3', b: '4' },
+      { a: '5', b: '6' },
+    ]);
+  });
+
+  it('returns 0 for header-only input and never calls the callback', () => {
+    let calls = 0;
+    const count = forEachCSVRow('id,name', () => calls++);
+    expect(count).toBe(0);
+    expect(calls).toBe(0);
+  });
+
+  it('fills missing trailing columns with empty string (matches parseCSV)', () => {
+    const rows: Record<string, string>[] = [];
+    forEachCSVRow('a,b,c\n1,2', (row) => rows.push(row));
+    expect(rows[0]).toEqual({ a: '1', b: '2', c: '' });
+  });
+
+  it('skips blank lines between rows', () => {
+    const rows: Record<string, string>[] = [];
+    const count = forEachCSVRow('a,b\n1,2\n\n3,4', (row) => rows.push(row));
+    expect(count).toBe(2);
+    expect(rows[1]).toEqual({ a: '3', b: '4' });
+  });
+
+  it('handles CRLF line endings', () => {
+    const rows: Record<string, string>[] = [];
+    forEachCSVRow('a,b\r\n1,2\r\n', (row) => rows.push(row));
+    expect(rows).toEqual([{ a: '1', b: '2' }]);
   });
 });
