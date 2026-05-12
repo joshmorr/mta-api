@@ -40,6 +40,12 @@ async function fetchAndParse(feedPath: string): Promise<FeedMessage> {
   return msg;
 }
 
+/** Test-only: drop all cached entries and pending fetches. */
+export function __resetRtCacheForTests(): void {
+  cache.clear();
+  pending.clear();
+}
+
 export async function getFeed(feedPath: string): Promise<{ feedMessage: FeedMessage; stale: boolean; feed_error?: string }> {
   const cached = cache.get(feedPath);
 
