@@ -119,6 +119,7 @@ export interface EntitySelector {
   agencyId?: string;
   routeId?: string;
   stopId?: string;
+  directionId?: number;
 }
 
 export interface TranslatedString {

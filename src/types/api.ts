@@ -59,10 +59,16 @@ export interface VehicleResponse {
   timestamp: number;
 }
 
+export interface InformedEntity {
+  agency_id?: string;
+  route_id?: string;
+  stop_id?: string;
+  direction_id?: 0 | 1;
+}
+
 export interface AlertResponse {
   id: string;
-  routes_affected: string[];
-  stops_affected: string[];
+  informed_entities: InformedEntity[];
   header: string;
   description: string;
   active_periods: { start: number; end: number }[];

@@ -99,10 +99,20 @@ export const ActivePeriodSchema = z.object({
   end: z.number(),
 }).openapi('ActivePeriod');
 
+export const InformedEntitySchema = z.object({
+  agency_id: z.string().optional(),
+  route_id: z.string().optional(),
+  stop_id: z.string().optional(),
+  direction_id: z.union([z.literal(0), z.literal(1)]).optional().openapi({
+    description: 'Affected direction of travel: 0 = Northbound, 1 = Southbound. Omitted when impact applies to both directions.',
+  }),
+}).openapi('InformedEntity');
+
 export const AlertSchema = z.object({
   id: z.string(),
-  routes_affected: z.array(z.string()),
-  stops_affected: z.array(z.string()),
+  informed_entities: z.array(InformedEntitySchema).openapi({
+    description: 'Per-entry impact selectors preserving the (route, stop, direction) pairing from the upstream feed.',
+  }),
   header: z.string(),
   description: z.string(),
   active_periods: z.array(ActivePeriodSchema),

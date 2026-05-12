@@ -65,7 +65,7 @@ describe('fetchAlerts', () => {
     expect(result.stale).toBe(false);
   });
 
-  it('extracts English text and dedupes routes/stops_affected', async () => {
+  it('extracts English text and preserves per-entry informed_entities', async () => {
     const body = await encodeFeedMessage({
       header: { gtfsRealtimeVersion: '2.0', timestamp: 1_700_000_001 },
       entity: [
@@ -97,11 +97,45 @@ describe('fetchAlerts', () => {
     expect(result.alerts).toHaveLength(1);
     const a = result.alerts[0];
     expect(a.id).toBe('a-1');
-    expect(a.routes_affected).toEqual(['A', 'C']);
-    expect(a.stops_affected).toEqual(['101', '102']);
+    expect(a.informed_entities).toEqual([
+      { route_id: 'A', stop_id: '101' },
+      { route_id: 'A', stop_id: '101' },
+      { route_id: 'C', stop_id: '102' },
+      {},
+    ]);
     expect(a.header).toBe('Hello');
     expect(a.description).toBe('Service change');
     expect(a.active_periods).toEqual([{ start: 100, end: 200 }]);
+  });
+
+  it('preserves per-entry direction_id and agency_id on informed_entities', async () => {
+    const body = await encodeFeedMessage({
+      header: { gtfsRealtimeVersion: '2.0', timestamp: 1_700_000_002 },
+      entity: [
+        {
+          id: 'a-2',
+          alert: {
+            activePeriod: [],
+            informedEntity: [
+              { agencyId: 'MTASBWY', routeId: '7', stopId: '711', directionId: 1 },
+              { agencyId: 'MTASBWY', routeId: '7', stopId: '712', directionId: 1 },
+              { agencyId: 'MTASBWY', routeId: '7', stopId: '713' },
+            ],
+            headerText: { translation: [{ text: '7 southbound work', language: 'en' }] },
+          },
+        },
+      ],
+    });
+    stubFetch(body);
+    advanceClock();
+
+    const result = await fetchAlerts();
+    expect(result.alerts).toHaveLength(1);
+    expect(result.alerts[0].informed_entities).toEqual([
+      { agency_id: 'MTASBWY', route_id: '7', stop_id: '711', direction_id: 1 },
+      { agency_id: 'MTASBWY', route_id: '7', stop_id: '712', direction_id: 1 },
+      { agency_id: 'MTASBWY', route_id: '7', stop_id: '713' },
+    ]);
   });
 
   it('skips entities without an alert payload (mixed feed)', async () => {
@@ -126,6 +160,6 @@ describe('fetchAlerts', () => {
     expect(result.alerts).toHaveLength(1);
     expect(result.alerts[0].id).toBe('a');
     expect(result.alerts[0].header).toBe('L disruption');
-    expect(result.alerts[0].stops_affected).toEqual([]);
+    expect(result.alerts[0].informed_entities).toEqual([{ route_id: 'L' }]);
   });
 });

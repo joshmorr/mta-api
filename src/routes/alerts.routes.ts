@@ -14,6 +14,10 @@ const getAlertsRoute = createRoute({
     query: z.object({
       routes: z.string().optional().openapi({ description: 'Comma-separated route IDs to filter alerts by', example: 'A,C' }),
       stop_id: z.string().optional().openapi({ description: 'Filter alerts affecting a specific stop', example: '127' }),
+      direction: z.enum(['N', 'S', '0', '1']).optional().openapi({
+        description: 'Filter alerts by direction of travel at the given stop. N or 0 = Northbound, S or 1 = Southbound. Only applies in combination with stop_id.',
+        example: 'S',
+      }),
     }),
   },
   responses: {
@@ -25,8 +29,13 @@ const getAlertsRoute = createRoute({
 alertsRouter.openapi(getAlertsRoute, async (c) => {
   const routesParam = c.req.query('routes');
   const stopId      = c.req.query('stop_id');
+  const dirParam    = c.req.query('direction');
   const routeFilter = routesParam
     ? routesParam.split(',').map((r) => r.trim()).filter(Boolean)
+    : undefined;
+  const directionFilter: 0 | 1 | undefined =
+    dirParam === 'N' || dirParam === '0' ? 0
+    : dirParam === 'S' || dirParam === '1' ? 1
     : undefined;
 
   try {
@@ -35,11 +44,18 @@ alertsRouter.openapi(getAlertsRoute, async (c) => {
     let filtered = alerts;
     if (routeFilter) {
       filtered = filtered.filter((a) =>
-        a.routes_affected.some((r) => routeFilter.includes(r))
+        a.informed_entities.some((ie) => ie.route_id && routeFilter.includes(ie.route_id))
       );
     }
     if (stopId) {
-      filtered = filtered.filter((a) => a.stops_affected.includes(stopId));
+      // Per §5.2: evaluate each informed_entity independently. An entry with
+      // stop_id and no direction_id means both directions are affected.
+      filtered = filtered.filter((a) =>
+        a.informed_entities.some((ie) =>
+          ie.stop_id === stopId &&
+          (directionFilter === undefined || ie.direction_id === undefined || ie.direction_id === directionFilter)
+        )
+      );
     }
 
     return c.json({
