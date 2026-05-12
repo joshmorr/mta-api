@@ -47,3 +47,15 @@ Subway routes map to specific RT feed paths (e.g. A/C/E → `nyct/gtfs-ace`). Th
 - Subway stops have a parent/platform hierarchy (parent station → N/S platforms). LIRR and MNR use a flat stop model.
 - Tests use `bun:test` and live in `src/test/`, mirroring the source structure.
 - The `data/` directory (SQLite DB) is gitignored and created automatically on first run.
+
+## Git commits
+
+Always use the [Conventional Commits](https://www.conventionalcommits.org/) spec:
+
+```
+<type>(<scope>): <description>
+
+[optional body]
+```
+
+Common types: `feat`, `fix`, `refactor`, `test`, `chore`, `docs`, `perf`, `ci`. Scope is optional but encouraged (e.g. `alerts`, `stops`, `seed`, `rt`). Keep the subject line under 72 characters, imperative mood, no trailing period.
