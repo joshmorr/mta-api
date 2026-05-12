@@ -14,6 +14,20 @@ import { findRoutesById } from '../db/queries/routes';
 import { findStopsById, getParentId } from '../db/queries/stops';
 import { toNumber } from '../utils/realtime';
 
+// VehicleStopStatus is a proto enum; protobufjs decodes it as an int.
+// Map back to the string union our API contract returns.
+const VEHICLE_STOP_STATUS: Record<number, Arrival['status']> = {
+  0: 'INCOMING_AT',
+  1: 'STOPPED_AT',
+  2: 'IN_TRANSIT_TO',
+};
+
+function toStopStatus(raw: unknown): Arrival['status'] {
+  if (typeof raw === 'string') return raw as Arrival['status'];
+  if (typeof raw === 'number' && raw in VEHICLE_STOP_STATUS) return VEHICLE_STOP_STATUS[raw];
+  return 'IN_TRANSIT_TO';
+}
+
 export async function getArrivalsForStop(
   stopId: string,
   limit: number,
@@ -85,9 +99,7 @@ export async function getArrivalsForStop(
         const vehicleEntity = feedMessage.entity.find(
           (e) => e.vehicle?.trip?.tripId === trip.tripId
         );
-        const status =
-          (vehicleEntity?.vehicle?.currentStatus as Arrival['status']) ??
-          'IN_TRANSIT_TO';
+        const status = toStopStatus(vehicleEntity?.vehicle?.currentStatus);
 
         arrivals.push({
           feed_id: stop.feed_id,
@@ -137,7 +149,7 @@ export async function getVehiclesForRoute(routeId: string, feedId: FeedId): Prom
       feed_id: route.feed_id,
       trip_id: v.trip.tripId,
       current_stop_id: v.stopId ?? '',
-      status: (v.currentStatus as VehicleResponse['status']) ?? 'IN_TRANSIT_TO',
+      status: toStopStatus(v.currentStatus),
       timestamp: toNumber(v.timestamp),
     });
   }
