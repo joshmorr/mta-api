@@ -1,5 +1,4 @@
 node_modules/
 dist/
 data/
-.claude
-.local
+.claude/settings.local.json
