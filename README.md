@@ -235,12 +235,14 @@ Active service alerts from the MTA's combined alerts feed.
 
 | Param | Type | Description |
 |-------|------|-------------|
-| `routes` | string | Comma-separated route filter |
+| `routes` | string | Comma-separated route filter, e.g. `A,C,E` |
 | `stop_id` | string | Filter alerts affecting a specific stop |
+| `direction` | string | Filter by direction at the given stop: `N` or `0` = Northbound, `S` or `1` = Southbound. Only applies with `stop_id`. |
 
 ```
 GET /alerts
 GET /alerts?routes=A,C,E
+GET /alerts?stop_id=711&direction=S
 ```
 
 ```json
@@ -250,8 +252,11 @@ GET /alerts?routes=A,C,E
   "alerts": [
     {
       "id": "lmm:planned_work:12345",
-      "routes_affected": ["A", "C"],
-      "stops_affected": ["A27", "A28"],
+      "informed_entities": [
+        { "agency_id": "MTASBWY", "route_id": "A", "stop_id": "A27", "direction_id": 1 },
+        { "agency_id": "MTASBWY", "route_id": "A", "stop_id": "A28", "direction_id": 1 },
+        { "agency_id": "MTASBWY", "route_id": "C", "stop_id": "A27", "direction_id": 1 }
+      ],
       "header": "Weekend service change on A/C",
       "description": "Trains run via F line...",
       "active_periods": [
@@ -261,6 +266,9 @@ GET /alerts?routes=A,C,E
   ]
 }
 ```
+
+Each `informed_entity` entry is an independent selector — fields within one entry are ANDed together, entries across an alert are ORed. A missing `direction_id` means both directions are affected at that stop. `agency_id` and `direction_id` are only present when the MTA included them in the feed; not all alerts carry station-level detail.
+
 
 ---
 
