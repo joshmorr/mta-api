@@ -48,7 +48,14 @@ Subway routes map to specific RT feed paths (e.g. A/C/E → `nyct/gtfs-ace`). Th
 - Tests use `bun:test` and live in `src/test/`, mirroring the source structure.
 - The `data/` directory (SQLite DB) is gitignored and created automatically on first run.
 
-## Git Commit Messages
-- Use conventional commits format: `type(scope): description`
-- Keep subject line under 72 characters
-- Use imperative mood ("add feature" not "added feature")
+## Git commits
+
+Always use the [Conventional Commits](https://www.conventionalcommits.org/) spec:
+
+```
+<type>(<scope>): <description>
+
+[optional body]
+```
+
+Common types: `feat`, `fix`, `refactor`, `test`, `chore`, `docs`, `perf`, `ci`. Scope is optional but encouraged (e.g. `alerts`, `stops`, `seed`, `rt`). Keep the subject line under 72 characters, imperative mood, no trailing period.
