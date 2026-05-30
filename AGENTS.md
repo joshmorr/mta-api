@@ -8,11 +8,11 @@ bun run dev          # hot reload; auto-seeds DB if empty
 bun run start
 bun run seed         # download + import all GTFS static feeds (~2-3 min)
 bun run build        # bundles to dist/
-bun run lint         # oxlint src/ scripts/  (NOT eslint — CLAUDE.md is wrong)
+bun run lint         # oxlint src/ scripts/  (NOT eslint)
 bun run lint:fix
 bun test
 bun test src/test/utils/csv.test.ts   # single test file
-bun test --coverage
+bun test --coverage  # or bun run test:coverage
 bunx tsc --noEmit    # type-check only (no build script for this)
 ```
 
@@ -34,6 +34,9 @@ bunx tsc --noEmit    # type-check only (no build script for this)
 
 ### Route → RT feed mapping
 Subway routes map to specific RT paths (A/C/E → `nyct/gtfs-ace`). Mapping lives in `src/services/feed.service.ts` as `SUBWAY_ROUTE_TO_FEED`. Routes not in the map are silently skipped. LIRR and MNR always use a single path.
+
+### Schema migrations
+`runMigrations()` in `src/db/client.ts` runs `CREATE TABLE IF NOT EXISTS` on startup. For breaking column changes, add a `hasColumn` detection check alongside the existing `feed_id` rebuild pattern — do not just edit `src/db/schema.ts`.
 
 ## Critical Hono Patterns
 
@@ -83,14 +86,14 @@ Drops and recreates tables with a legacy schema inside the test, then restores i
 
 ## Other Gotchas
 
-- **Linter is `oxlint`**, not ESLint. No `.eslintrc` or `eslint.config.*` exists.
+- **Linter is `oxlint`**, not ESLint. `.oxlintrc.json` exists; key rules: `no-unused-vars` ignores `^_`, `@typescript-eslint/no-explicit-any` is `warn`, `dist/**` is ignored.
 - **`route_color` is stored with a `#` prefix** (`upsertRoutes` prepends it). GTFS CSV has raw hex without `#`.
 - **Late-night service**: `getRelevantServiceDates()` includes the previous calendar day when NY hour < 5, to handle `stop_times` entries with values like `25:30:00`.
 - **503 during seeding**: While `state.seeding = true`, all routes except `/health` return `{ error: "Service is seeding initial data", code: "SEEDING" }`.
 - **Stale RT**: When an upstream fetch fails but a prior cache entry exists, arrivals still return with `stale: true`. When there is no cache at all, the service throws and the route returns 503.
 - **Rate limiter is in-process** (a module-level `Map`). All requests without a proxy share one bucket keyed on `'unknown'`.
 - **`data/` is gitignored and auto-created** by `client.ts` via `mkdirSync(..., { recursive: true })`.
-- **`console.error` for logging** (not `console.log`) — intentional to keep stdout clean.
+- **Logging**: `console.error` is the dominant pattern (keeps stdout clean). One exception: `startup.ts` uses `console.log` for the initial seeding message.
 
 ## Commit Style
 
