@@ -16,13 +16,27 @@ bun run dev          # start with hot reload (auto-seeds DB if empty)
 bun run start        # start without hot reload
 bun run seed         # download + import all GTFS static feeds (~2-3 min)
 bun run build        # bundle to dist/
-bun run lint         # eslint
-bun run lint:fix     # eslint --fix
+bun run lint         # oxlint
+bun run lint:fix     # oxlint --fix
 bun test             # run all tests (bun:test)
+bun test --coverage  # run tests with coverage
 bun test src/test/utils/csv.test.ts   # run a single test file
 ```
 
 Type-check: `bunx tsc --noEmit` (no build script wired up for this).
+
+### Environment variables
+
+Copy `.env.example` to `.env`. All have defaults so the server starts without one.
+
+| Variable | Default | Notes |
+|---|---|---|
+| `PORT` | `3000` | |
+| `HOST` | `0.0.0.0` | |
+| `DB_PATH` | `./data/mta.db` | Use `:memory:` for ephemeral dev |
+| `RT_CACHE_TTL_MS` | `20000` | RT feed cache TTL |
+| `SUBWAY_SYNC_INTERVAL_MS` | `3600000` | 1 hour |
+| `RAIL_SYNC_INTERVAL_MS` | `86400000` | 24 hours |
 
 ## Architecture
 
@@ -45,8 +59,13 @@ Subway routes map to specific RT feed paths (e.g. A/C/E → `nyct/gtfs-ace`). Th
 - Routes use `OpenAPIHono` + `createRoute()` with Zod schemas in `src/schemas/api.ts`. Response types in `src/types/api.ts` are the original TypeScript interfaces (still used by services). Status codes in handlers must use `as const` (e.g. `c.json(data, 200 as const)`) for type narrowing.
 - OpenAPI spec served at `GET /doc`, Swagger UI at `GET /ui`.
 - Subway stops have a parent/platform hierarchy (parent station → N/S platforms). LIRR and MNR use a flat stop model.
-- Tests use `bun:test` and live in `src/test/`, mirroring the source structure.
+- Tests use `bun:test` and live in `src/test/`, mirroring the source structure. `bunfig.toml` preloads `src/test/setup.ts` before every test run — it sets `DB_PATH=:memory:` and runs migrations so tests never touch the real DB.
+- Test helpers: `src/test/helpers/seed.ts` exports `resetDb()`, `seedSubway()`, `seedLirr()`, `seedMnr()` for fixture setup. `src/test/helpers/app.ts` exports `makeTestApp(router, mountPath)` to mount a single router for isolated route tests.
 - The `data/` directory (SQLite DB) is gitignored and created automatically on first run.
+
+### Adding schema changes
+
+Schema DDL lives in `src/db/schema.ts` as `CREATE TABLE IF NOT EXISTS` statements. `runMigrations()` in `src/db/client.ts` runs them on startup. For breaking column changes, add detection logic to `runMigrations()` alongside the existing `hasColumn` check (see the `feed_id` migration as an example).
 
 ## Git commits
 
