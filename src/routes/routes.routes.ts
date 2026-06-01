@@ -1,10 +1,10 @@
-import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi';
+import { createRoute, z } from '@hono/zod-openapi';
 import { getAllRoutes, getRouteById } from '../db/queries/routes';
-import type { RouteRow, RouteTypeFilter } from '../db/queries/routes';
-import { parseFeedId } from '../utils/feedParams';
+import type { RouteRow } from '../db/queries/routes';
+import { createApiRouter } from '../utils/openapi';
 import { RouteListResponseSchema, RouteResponseSchema, ErrorSchema } from '../schemas/api';
 
-export const routesRouter = new OpenAPIHono();
+export const routesRouter = createApiRouter();
 
 function toRouteResponse(r: RouteRow) {
   return {
@@ -34,13 +34,8 @@ const listRoutesRoute = createRoute({
 });
 
 routesRouter.openapi(listRoutesRoute, (c) => {
-  const feed = c.req.query('feed');
-
-  if (feed && !['subway', 'lirr', 'mnr'].includes(feed)) {
-    return c.json({ error: `Unknown feed: ${feed}`, code: 'INVALID_PARAM' }, 400 as const);
-  }
-
-  const routes = getAllRoutes(feed as RouteTypeFilter | undefined).map(toRouteResponse);
+  const { feed } = c.req.valid('query');
+  const routes = getAllRoutes(feed).map(toRouteResponse);
   return c.json({ routes }, 200 as const);
 });
 
@@ -65,17 +60,8 @@ const getRouteRoute = createRoute({
 });
 
 routesRouter.openapi(getRouteRoute, (c) => {
-  const routeId = c.req.param('route_id');
-  const feedRaw = c.req.query('feed');
-  const feedId  = parseFeedId(feedRaw);
-
-  if (!feedRaw) {
-    return c.json({ error: 'feed is required', code: 'INVALID_PARAM' }, 400 as const);
-  }
-
-  if (!feedId) {
-    return c.json({ error: 'feed must be one of subway, lirr, mnr', code: 'INVALID_PARAM' }, 400 as const);
-  }
+  const { route_id: routeId } = c.req.valid('param');
+  const { feed: feedId } = c.req.valid('query');
 
   const route = getRouteById(routeId, feedId);
 

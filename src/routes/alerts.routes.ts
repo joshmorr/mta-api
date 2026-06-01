@@ -1,8 +1,9 @@
-import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi';
+import { createRoute, z } from '@hono/zod-openapi';
 import { fetchAlerts } from '../services/alerts.service';
+import { createApiRouter } from '../utils/openapi';
 import { AlertListResponseSchema, ErrorSchema } from '../schemas/api';
 
-export const alertsRouter = new OpenAPIHono();
+export const alertsRouter = createApiRouter();
 
 const getAlertsRoute = createRoute({
   method: 'get',
@@ -27,9 +28,7 @@ const getAlertsRoute = createRoute({
 });
 
 alertsRouter.openapi(getAlertsRoute, async (c) => {
-  const routesParam = c.req.query('routes');
-  const stopId      = c.req.query('stop_id');
-  const dirParam    = c.req.query('direction');
+  const { routes: routesParam, stop_id: stopId, direction: dirParam } = c.req.valid('query');
   const routeFilter = routesParam
     ? routesParam.split(',').map((r) => r.trim()).filter(Boolean)
     : undefined;

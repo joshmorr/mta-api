@@ -1,9 +1,9 @@
-import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi';
+import { createRoute, z } from '@hono/zod-openapi';
 import { getArrivalsForStop, NotFoundError } from '../services/realtime.service';
-import { parseFeedId } from '../utils/feedParams';
+import { createApiRouter } from '../utils/openapi';
 import { ArrivalResponseSchema, ErrorSchema } from '../schemas/api';
 
-export const arrivalsRouter = new OpenAPIHono();
+export const arrivalsRouter = createApiRouter();
 
 const getArrivalsRoute = createRoute({
   method: 'get',
@@ -15,7 +15,7 @@ const getArrivalsRoute = createRoute({
     query: z.object({
       stop: z.string().openapi({ description: 'Stop ID', example: '127N' }),
       feed: z.enum(['subway', 'lirr', 'mnr']).openapi({ description: 'Feed the stop belongs to' }),
-      limit: z.string().optional().openapi({ description: 'Max arrivals to return (max 50, default 5)', example: '5' }),
+      limit: z.coerce.number({ message: 'must be a number' }).int().positive({ message: 'must be greater than 0' }).default(5).transform((n) => Math.min(n, 50)).openapi({ description: 'Max arrivals to return (clamped to 50, default 5)', example: 5 }),
       routes: z.string().optional().openapi({ description: 'Comma-separated route IDs to filter by', example: 'A,C,E' }),
     }),
   },
@@ -28,26 +28,10 @@ const getArrivalsRoute = createRoute({
 });
 
 arrivalsRouter.openapi(getArrivalsRoute, async (c) => {
-  const stopId      = c.req.query('stop');
-  const feedRaw     = c.req.query('feed');
-  const feedId      = parseFeedId(feedRaw);
-  const limit       = Math.min(Number(c.req.query('limit') ?? 5), 50);
-  const routesParam = c.req.query('routes');
+  const { stop: stopId, feed: feedId, limit, routes: routesParam } = c.req.valid('query');
   const routeFilter = routesParam
     ? routesParam.split(',').map((r) => r.trim()).filter(Boolean)
     : undefined;
-
-  if (!stopId) {
-    return c.json({ error: 'stop is required', code: 'INVALID_PARAM' }, 400 as const);
-  }
-
-  if (!feedRaw) {
-    return c.json({ error: 'feed is required', code: 'INVALID_PARAM' }, 400 as const);
-  }
-
-  if (!feedId) {
-    return c.json({ error: 'feed must be one of subway, lirr, mnr', code: 'INVALID_PARAM' }, 400 as const);
-  }
 
   try {
     const result = await getArrivalsForStop(stopId, limit, feedId, routeFilter);

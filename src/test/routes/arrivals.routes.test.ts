@@ -71,6 +71,21 @@ describe('GET /arrivals', () => {
       const res = await app.request('/arrivals?stop=127&feed=bus');
       expect(res.status).toBe(400);
     });
+
+    it('renders validation failures as the standard { error, code } shape', async () => {
+      const res = await app.request('/arrivals?stop=127');
+      expect(res.status).toBe(400);
+      const body = (await res.json()) as { error: string; code: string };
+      expect(body.code).toBe('INVALID_PARAM');
+      expect(typeof body.error).toBe('string');
+    });
+
+    it('returns 400 when limit is not a number', async () => {
+      const res = await app.request('/arrivals?stop=127&feed=subway&limit=abc');
+      expect(res.status).toBe(400);
+      const body = (await res.json()) as { code: string };
+      expect(body.code).toBe('INVALID_PARAM');
+    });
   });
 
   describe('happy path', () => {

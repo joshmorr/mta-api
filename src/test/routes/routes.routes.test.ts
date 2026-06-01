@@ -13,10 +13,13 @@ describe('GET /routes', () => {
   });
 
   it('returns 400 when feed is invalid', async () => {
-    // The handler validates `feed` manually before parseFeedId, so this is
-    // the handler's check (not Zod) — Zod only validates the enum.
+    // Validation is handled by the Zod schema; the createApiRouter defaultHook
+    // renders the failure as the standard { error, code } shape.
     const res = await app.request('/routes?feed=bus');
     expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: string; code: string };
+    expect(body.code).toBe('INVALID_PARAM');
+    expect(typeof body.error).toBe('string');
   });
 
   it('lists all routes across feeds when no filter', async () => {

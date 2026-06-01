@@ -1,4 +1,4 @@
-import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi';
+import { createRoute, z } from '@hono/zod-openapi';
 import {
   findStopsByProximity,
   findStopsByName,
@@ -8,14 +8,14 @@ import {
   getPlatforms,
   getParentId,
 } from '../db/queries/stops';
-import { parseFeedId } from '../utils/feedParams';
+import { createApiRouter } from '../utils/openapi';
 import {
   StopListResponseSchema,
   StopDetailSchema,
   ErrorSchema,
 } from '../schemas/api';
 
-export const stopsRouter = new OpenAPIHono();
+export const stopsRouter = createApiRouter();
 
 const listStopsRoute = createRoute({
   method: 'get',
@@ -26,11 +26,11 @@ const listStopsRoute = createRoute({
   request: {
     query: z.object({
       q: z.string().optional().openapi({ description: 'Search stops by name' }),
-      lat: z.string().optional().openapi({ description: 'Latitude for proximity search', example: '40.7484' }),
-      lon: z.string().optional().openapi({ description: 'Longitude for proximity search', example: '-73.9967' }),
+      lat: z.coerce.number({ message: 'must be a number' }).optional().openapi({ description: 'Latitude for proximity search', example: 40.7484 }),
+      lon: z.coerce.number({ message: 'must be a number' }).optional().openapi({ description: 'Longitude for proximity search', example: -73.9967 }),
       feed: z.enum(['subway', 'lirr', 'mnr']).optional().openapi({ description: 'Filter by feed' }),
-      radius: z.string().optional().openapi({ description: 'Search radius in meters (max 1600, default 400)', example: '400' }),
-      limit: z.string().optional().openapi({ description: 'Max results (max 50, default 20)', example: '20' }),
+      radius: z.coerce.number({ message: 'must be a number' }).positive({ message: 'must be greater than 0' }).max(1600, { message: 'must be <= 1600' }).default(400).openapi({ description: 'Search radius in meters (max 1600, default 400)', example: 400 }),
+      limit: z.coerce.number({ message: 'must be a number' }).int().positive({ message: 'must be greater than 0' }).default(20).transform((n) => Math.min(n, 50)).openapi({ description: 'Max results (clamped to 50, default 20)', example: 20 }),
     }),
   },
   responses: {
@@ -40,29 +40,14 @@ const listStopsRoute = createRoute({
 });
 
 stopsRouter.openapi(listStopsRoute, (c) => {
-  const q      = c.req.query('q');
-  const lat    = c.req.query('lat');
-  const lon    = c.req.query('lon');
-  const feedId = parseFeedId(c.req.query('feed'));
-  const radius = Number(c.req.query('radius') ?? 400);
-  const limit  = Math.min(Number(c.req.query('limit') ?? 20), 50);
-
-  if (c.req.query('feed') && !feedId) {
-    return c.json({ error: 'feed must be one of subway, lirr, mnr', code: 'INVALID_PARAM' }, 400 as const);
-  }
-
-  if (radius > 1600) {
-    return c.json({ error: 'radius must be <= 1600', code: 'INVALID_PARAM' }, 400 as const);
-  }
+  const { q, lat, lon, feed: feedId, radius, limit } = c.req.valid('query');
 
   let rows;
 
-  if (lat && lon) {
-    const latN     = Number(lat);
-    const lonN     = Number(lon);
+  if (lat !== undefined && lon !== undefined) {
     const latDelta = radius / 111_000;
-    const lonDelta = radius / (111_000 * Math.cos((latN * Math.PI) / 180));
-    rows = findStopsByProximity(latN, lonN, latDelta, lonDelta, limit, feedId);
+    const lonDelta = radius / (111_000 * Math.cos((lat * Math.PI) / 180));
+    rows = findStopsByProximity(lat, lon, latDelta, lonDelta, limit, feedId);
   } else if (q) {
     rows = findStopsByName(q, limit, feedId);
   } else {
@@ -103,17 +88,8 @@ const getStopRoute = createRoute({
 });
 
 stopsRouter.openapi(getStopRoute, (c) => {
-  const stopId  = c.req.param('stop_id');
-  const feedRaw = c.req.query('feed');
-  const feedId  = parseFeedId(feedRaw);
-
-  if (!feedRaw) {
-    return c.json({ error: 'feed is required', code: 'INVALID_PARAM' }, 400 as const);
-  }
-
-  if (!feedId) {
-    return c.json({ error: 'feed must be one of subway, lirr, mnr', code: 'INVALID_PARAM' }, 400 as const);
-  }
+  const { stop_id: stopId } = c.req.valid('param');
+  const { feed: feedId } = c.req.valid('query');
 
   const stop = getStopById(stopId, feedId);
 
