@@ -82,6 +82,14 @@ export async function getArrivalsForStop(
       overallFeedError = feed_error;
     }
 
+    // Index vehicle status by trip id once per feed message so the inner
+    // arrivals loop is O(1) per lookup instead of rescanning all entities.
+    const statusByTripId = new Map<string, unknown>();
+    for (const entity of feedMessage.entity) {
+      const tripId = entity.vehicle?.trip?.tripId;
+      if (tripId) statusByTripId.set(tripId, entity.vehicle?.currentStatus);
+    }
+
     for (const entity of feedMessage.entity) {
       if (!entity.tripUpdate) continue;
       const { trip, stopTimeUpdate } = entity.tripUpdate;
@@ -95,11 +103,7 @@ export async function getArrivalsForStop(
         const arrivalTime = toNumber(stu.arrival.time);
         if (arrivalTime <= now) continue;
 
-        // Find vehicle status for this trip
-        const vehicleEntity = feedMessage.entity.find(
-          (e) => e.vehicle?.trip?.tripId === trip.tripId
-        );
-        const status = toStopStatus(vehicleEntity?.vehicle?.currentStatus);
+        const status = toStopStatus(statusByTripId.get(trip.tripId));
 
         arrivals.push({
           feed_id: stop.feed_id,
