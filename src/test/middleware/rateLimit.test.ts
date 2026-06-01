@@ -77,6 +77,24 @@ describe('rateLimit middleware', () => {
     expect(r3.headers.get('X-RateLimit-Remaining')).toBe('99');
   });
 
+  it('prefers fly-client-ip over a spoofable x-forwarded-for', async () => {
+    const app = makeApp();
+    const real = ip();
+    // Attacker rotates the forgeable XFF header but Fly-Client-IP is constant.
+    const r1 = await app.request(
+      new Request('http://x/anything', {
+        headers: { 'fly-client-ip': real, 'x-forwarded-for': '1.1.1.1' },
+      }),
+    );
+    const r2 = await app.request(
+      new Request('http://x/anything', {
+        headers: { 'fly-client-ip': real, 'x-forwarded-for': '2.2.2.2' },
+      }),
+    );
+    expect(r1.headers.get('X-RateLimit-Remaining')).toBe('99');
+    expect(r2.headers.get('X-RateLimit-Remaining')).toBe('98'); // same bucket
+  });
+
   it('falls back to "unknown" when no x-forwarded-for header is present', async () => {
     const app = makeApp();
     const res = await app.request(new Request('http://x/anything'));

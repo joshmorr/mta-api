@@ -17,7 +17,10 @@ export const rateLimit: MiddlewareHandler = async (c, next) => {
     return;
   }
 
-  const ip = c.req.header('x-forwarded-for')?.split(',')[0].trim() ?? 'unknown';
+  const ip =
+    c.req.header('fly-client-ip')?.trim() ||
+    c.req.header('x-forwarded-for')?.split(',')[0].trim() ||
+    'unknown';
   const now = Date.now();
   let entry = store.get(ip);
 
