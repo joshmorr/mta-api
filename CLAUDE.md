@@ -21,9 +21,13 @@ bun run lint:fix     # oxlint --fix
 bun test             # run all tests (bun:test)
 bun test --coverage  # run tests with coverage
 bun test src/test/utils/csv.test.ts   # run a single test file
+bun run test:hurl    # black-box HTTP tests (boots a real server; needs `hurl`)
+bun run test:hurl:all # ^ plus realtime smoke (hits live MTA feeds)
 ```
 
 Type-check: `bunx tsc --noEmit` (no build script wired up for this).
+
+`hurl` is a separate binary (not a package dep) — install from <https://hurl.dev>. The `hurl/` suites test the real HTTP surface (status codes, `{error,code}` envelope, headers) that in-process `bun:test` can't reach; see `hurl/README.md`.
 
 ### Environment variables
 

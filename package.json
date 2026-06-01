@@ -8,7 +8,9 @@
     "lint": "oxlint src/ scripts/",
     "lint:fix": "oxlint --fix src/ scripts/",
     "test": "bun test",
-    "test:coverage": "bun test --coverage"
+    "test:coverage": "bun test --coverage",
+    "test:hurl": "sh scripts/hurl.sh hurl/contract.hurl hurl/stops.hurl",
+    "test:hurl:all": "sh scripts/hurl.sh hurl/contract.hurl hurl/stops.hurl hurl/realtime.hurl"
   },
   "dependencies": {
     "@hono/swagger-ui": "^0.6.1",
