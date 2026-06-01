@@ -1,4 +1,5 @@
 import { unzipSync } from 'fflate';
+import { config } from '../config';
 import { parseCSV, forEachCSVRow } from '../utils/csv';
 import {
   clearFeedData,
@@ -47,7 +48,9 @@ function extractAndParse(files: Record<string, Uint8Array>, name: string): unkno
 
 async function syncFeed(url: string, feedId: FeedId) {
   console.error(`[staticFeed] Syncing ${feedId}...`);
-  const buffer = await fetch(url).then((r) => {
+  const buffer = await fetch(url, {
+    signal: AbortSignal.timeout(config.staticFetchTimeoutMs),
+  }).then((r) => {
     if (!r.ok) throw new Error(`Failed to fetch ${url}: HTTP ${r.status}`);
     return r.arrayBuffer();
   });
