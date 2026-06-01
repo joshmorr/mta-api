@@ -39,6 +39,8 @@ Copy `.env.example` to `.env`. All have defaults so the server starts without on
 | `HOST` | `0.0.0.0` | |
 | `DB_PATH` | `./data/mta.db` | Use `:memory:` for ephemeral dev |
 | `RT_CACHE_TTL_MS` | `20000` | RT feed cache TTL |
+| `RT_FETCH_TIMEOUT_MS` | `10000` | Upstream RT fetch timeout (abort) |
+| `STATIC_FETCH_TIMEOUT_MS` | `60000` | Upstream static GTFS zip fetch timeout (abort) |
 | `SUBWAY_SYNC_INTERVAL_MS` | `3600000` | 1 hour |
 | `RAIL_SYNC_INTERVAL_MS` | `86400000` | 24 hours |
 
