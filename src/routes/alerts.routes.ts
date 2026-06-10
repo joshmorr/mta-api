@@ -9,6 +9,7 @@ const getAlertsRoute = createRoute({
   method: 'get',
   path: '/',
   tags: ['Alerts'],
+  operationId: 'getAlerts',
   summary: 'Get service alerts',
   description: 'Returns active MTA service alerts, optionally filtered by route or stop.',
   request: {

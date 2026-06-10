@@ -5,9 +5,28 @@ export const FeedTypeSchema = z.enum(['subway', 'lirr', 'mnr']).openapi({
   example: 'subway',
 });
 
+export const ErrorCodeSchema = z.enum([
+  'INVALID_PARAM',
+  'NOT_FOUND',
+  'FEED_ERROR',
+  'RATE_LIMITED',
+  'SEEDING',
+  'INTERNAL',
+]).openapi('ErrorCode', {
+  description:
+    'Stable machine-readable error code for client branching. ' +
+    '`INVALID_PARAM`: a query/path parameter failed validation (400). ' +
+    '`NOT_FOUND`: the requested entity or route does not exist (404). ' +
+    '`FEED_ERROR`: an upstream realtime feed was unavailable and no cache could be served (503). ' +
+    '`RATE_LIMITED`: too many requests (429). ' +
+    '`SEEDING`: the service is importing initial static data and is not ready yet (503). ' +
+    '`INTERNAL`: an unexpected server error (500).',
+  example: 'NOT_FOUND',
+});
+
 export const ErrorSchema = z.object({
-  error: z.string(),
-  code: z.string(),
+  error: z.string().openapi({ description: 'Human-readable error message', example: 'Stop 999 not found' }),
+  code: ErrorCodeSchema,
 }).openapi('Error');
 
 // --- Stops ---

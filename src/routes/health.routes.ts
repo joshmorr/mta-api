@@ -9,6 +9,7 @@ const getHealthRoute = createRoute({
   method: 'get',
   path: '/',
   tags: ['Health'],
+  operationId: 'getHealth',
   summary: 'API health and feed status',
   description: 'Returns server status and per-feed static data counts and sync timestamps.',
   responses: {

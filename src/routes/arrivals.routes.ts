@@ -9,6 +9,7 @@ const getArrivalsRoute = createRoute({
   method: 'get',
   path: '/',
   tags: ['Arrivals'],
+  operationId: 'getArrivals',
   summary: 'Get arrivals for a stop',
   description: 'Returns upcoming train arrivals at a stop from the GTFS-RT feed.',
   request: {

@@ -21,6 +21,7 @@ const listStopsRoute = createRoute({
   method: 'get',
   path: '/',
   tags: ['Stops'],
+  operationId: 'listStops',
   summary: 'List or search stops',
   description: 'Returns stops filtered by name, proximity, or feed. Provide `lat`+`lon` for proximity search, `q` for name search, or neither for all stops.',
   request: {
@@ -70,6 +71,7 @@ const getStopRoute = createRoute({
   method: 'get',
   path: '/:stop_id',
   tags: ['Stops'],
+  operationId: 'getStop',
   summary: 'Get stop by ID',
   description: 'Returns full details for a stop including platform directions. For subway stops, resolves to the parent station.',
   request: {
