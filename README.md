@@ -33,8 +33,11 @@ All options are environment variables. Defaults work out of the box.
 | `HOST` | `0.0.0.0` | HTTP listen host |
 | `DB_PATH` | `./data/mta.db` | SQLite database path |
 | `RT_CACHE_TTL_MS` | `20000` | Realtime feed cache TTL in milliseconds |
+| `RT_FETCH_TIMEOUT_MS` | `10000` | Upstream realtime fetch timeout in milliseconds |
+| `STATIC_FETCH_TIMEOUT_MS` | `60000` | Upstream static GTFS ZIP fetch timeout in milliseconds |
 | `SUBWAY_SYNC_INTERVAL_MS` | `3600000` | Subway static feed refresh interval (1 hour) |
 | `RAIL_SYNC_INTERVAL_MS` | `86400000` | LIRR/MNR static feed refresh interval (24 hours) |
+| `LOG_LEVEL` | `info` | Log verbosity: `debug`, `info`, `warn`, `error` |
 
 ---
 
