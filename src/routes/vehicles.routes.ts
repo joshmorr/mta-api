@@ -9,6 +9,7 @@ const getVehiclesRoute = createRoute({
   method: 'get',
   path: '/',
   tags: ['Vehicles'],
+  operationId: 'getVehicles',
   summary: 'Get active vehicles for a route',
   description: 'Returns current vehicle positions for all active trips on a route from the GTFS-RT feed.',
   request: {

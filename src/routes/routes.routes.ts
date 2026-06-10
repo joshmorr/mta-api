@@ -20,6 +20,7 @@ const listRoutesRoute = createRoute({
   method: 'get',
   path: '/',
   tags: ['Routes'],
+  operationId: 'listRoutes',
   summary: 'List routes',
   description: 'Returns all routes, optionally filtered by feed.',
   request: {
@@ -43,6 +44,7 @@ const getRouteRoute = createRoute({
   method: 'get',
   path: '/:route_id',
   tags: ['Routes'],
+  operationId: 'getRoute',
   summary: 'Get route by ID',
   request: {
     params: z.object({

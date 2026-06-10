@@ -535,6 +535,7 @@
         "tags": [
           "Stops"
         ],
+        "operationId": "listStops",
         "summary": "List or search stops",
         "description": "Returns stops filtered by name, proximity, or feed. Provide `lat`+`lon` for proximity search, `q` for name search, or neither for all stops.",
         "parameters": [
@@ -646,6 +647,7 @@
         "tags": [
           "Stops"
         ],
+        "operationId": "getStop",
         "summary": "Get stop by ID",
         "description": "Returns full details for a stop including platform directions. For subway stops, resolves to the parent station.",
         "parameters": [
@@ -715,6 +717,7 @@
         "tags": [
           "Routes"
         ],
+        "operationId": "listRoutes",
         "summary": "List routes",
         "description": "Returns all routes, optionally filtered by feed.",
         "parameters": [
@@ -763,6 +766,7 @@
         "tags": [
           "Routes"
         ],
+        "operationId": "getRoute",
         "summary": "Get route by ID",
         "parameters": [
           {
@@ -831,6 +835,7 @@
         "tags": [
           "Arrivals"
         ],
+        "operationId": "getArrivals",
         "summary": "Get arrivals for a stop",
         "description": "Returns upcoming train arrivals at a stop from the GTFS-RT feed.",
         "parameters": [
@@ -935,6 +940,7 @@
         "tags": [
           "Vehicles"
         ],
+        "operationId": "getVehicles",
         "summary": "Get active vehicles for a route",
         "description": "Returns current vehicle positions for all active trips on a route from the GTFS-RT feed.",
         "parameters": [
@@ -1014,6 +1020,7 @@
         "tags": [
           "Alerts"
         ],
+        "operationId": "getAlerts",
         "summary": "Get service alerts",
         "description": "Returns active MTA service alerts, optionally filtered by route or stop.",
         "parameters": [
@@ -1086,6 +1093,7 @@
         "tags": [
           "Health"
         ],
+        "operationId": "getHealth",
         "summary": "API health and feed status",
         "description": "Returns server status and per-feed static data counts and sync timestamps.",
         "responses": {
