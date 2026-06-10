@@ -7,6 +7,7 @@ import { startup } from './startup';
 import { state } from './state';
 import { stopsRouter, routesRouter, arrivalsRouter, vehiclesRouter, alertsRouter, healthRouter } from './routes';
 import { rateLimit } from './middleware/rateLimit';
+import { openApiDocConfig } from './openapi';
 
 const app = new OpenAPIHono();
 
@@ -34,15 +35,7 @@ app.route('/vehicles', vehiclesRouter);
 app.route('/alerts', alertsRouter);
 app.route('/health', healthRouter);
 
-app.doc('/doc', {
-  openapi: '3.0.0',
-  info: {
-    title: 'MTA API',
-    version: '1.0.0',
-    description: 'REST API for NYC MTA transit data — subway, LIRR, and Metro-North routes, stops, arrivals, vehicles, and service alerts.',
-  },
-  servers: [{ url: `http://${config.host}:${config.port}`, description: 'Local' }],
-});
+app.doc('/doc', openApiDocConfig);
 
 app.get('/ui', swaggerUI({ url: '/doc' }));
 

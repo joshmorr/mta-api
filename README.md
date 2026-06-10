@@ -49,6 +49,16 @@ All responses are `application/json`. Errors follow a consistent shape:
 { "error": "human-readable message", "code": "MACHINE_CODE" }
 ```
 
+### OpenAPI spec
+
+The full OpenAPI 3.0 spec is committed at [`openapi.json`](./openapi.json) and is the artifact to feed into client generators (`openapi-typescript`, `orval`, `openapi-generator`, …) when building a typed client. The running server also serves it live at `GET /doc`, with Swagger UI at `GET /ui`.
+
+Regenerate the committed file after changing any route or schema:
+
+```sh
+bun run openapi:dump
+```
+
 ### Feed scoping
 
 The MTA reuses raw GTFS IDs across subway, LIRR, and Metro-North (e.g. `stop_id=1` and `route_id=1` exist in multiple feeds). Collection endpoints (`GET /stops`, `GET /routes`) are cross-feed by default and accept an optional `?feed=` filter. All other endpoints require `?feed=` because IDs are only unique within a feed.

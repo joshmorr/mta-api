@@ -16,6 +16,7 @@ bun run dev          # start with hot reload (auto-seeds DB if empty)
 bun run start        # start without hot reload
 bun run seed         # download + import all GTFS static feeds (~2-3 min)
 bun run build        # bundle to dist/
+bun run openapi:dump # regenerate committed openapi.json (run after route/schema changes)
 bun run lint         # oxlint
 bun run lint:fix     # oxlint --fix
 bun test             # run all tests (bun:test)
@@ -63,7 +64,7 @@ Subway routes map to specific RT feed paths (e.g. A/C/E → `nyct/gtfs-ace`). Th
 ### Key patterns
 
 - Routes use `OpenAPIHono` + `createRoute()` with Zod schemas in `src/schemas/api.ts`. Response types in `src/types/api.ts` are the original TypeScript interfaces (still used by services). Status codes in handlers must use `as const` (e.g. `c.json(data, 200 as const)`) for type narrowing.
-- OpenAPI spec served at `GET /doc`, Swagger UI at `GET /ui`.
+- OpenAPI spec served at `GET /doc`, Swagger UI at `GET /ui`. The doc metadata lives in `src/openapi.ts` (`openApiDocConfig`), shared by `index.ts` and the static dump. `bun run openapi:dump` writes the committed `openapi.json` (the codegen artifact) via `buildOpenApiDocument()`, which mounts the routers without booting the server and normalizes Hono `:param` path keys to OpenAPI `{param}`. Regenerate it after any route or schema change.
 - Subway stops have a parent/platform hierarchy (parent station → N/S platforms). LIRR and MNR use a flat stop model.
 - Tests use `bun:test` and live in `src/test/`, mirroring the source structure. `bunfig.toml` preloads `src/test/setup.ts` before every test run — it sets `DB_PATH=:memory:` and runs migrations so tests never touch the real DB.
 - Test helpers: `src/test/helpers/seed.ts` exports `resetDb()`, `seedSubway()`, `seedLirr()`, `seedMnr()` for fixture setup. `src/test/helpers/app.ts` exports `makeTestApp(router, mountPath)` to mount a single router for isolated route tests.

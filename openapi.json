@@ -1,0 +1,1106 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "MTA API",
+    "version": "1.0.0",
+    "description": "REST API for NYC MTA transit data — subway, LIRR, and Metro-North routes, stops, arrivals, vehicles, and service alerts."
+  },
+  "servers": [
+    {
+      "url": "http://0.0.0.0:3000",
+      "description": "Local"
+    }
+  ],
+  "components": {
+    "schemas": {
+      "StopListResponse": {
+        "type": "object",
+        "properties": {
+          "stops": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StopSummary"
+            }
+          }
+        },
+        "required": [
+          "stops"
+        ]
+      },
+      "StopSummary": {
+        "type": "object",
+        "properties": {
+          "feed_id": {
+            "type": "string",
+            "enum": [
+              "subway",
+              "lirr",
+              "mnr"
+            ],
+            "description": "Transit feed identifier",
+            "example": "subway"
+          },
+          "stop_id": {
+            "type": "string"
+          },
+          "stop_name": {
+            "type": "string"
+          },
+          "lat": {
+            "type": "number"
+          },
+          "lon": {
+            "type": "number"
+          },
+          "platforms": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "feed_id",
+          "stop_id",
+          "stop_name",
+          "lat",
+          "lon",
+          "platforms"
+        ]
+      },
+      "Error": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "error",
+          "code"
+        ]
+      },
+      "StopDetail": {
+        "type": "object",
+        "properties": {
+          "feed_id": {
+            "type": "string",
+            "enum": [
+              "subway",
+              "lirr",
+              "mnr"
+            ],
+            "description": "Transit feed identifier",
+            "example": "subway"
+          },
+          "stop_id": {
+            "type": "string"
+          },
+          "stop_name": {
+            "type": "string"
+          },
+          "lat": {
+            "type": "number"
+          },
+          "lon": {
+            "type": "number"
+          },
+          "platforms": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlatformDetail"
+            }
+          }
+        },
+        "required": [
+          "feed_id",
+          "stop_id",
+          "stop_name",
+          "lat",
+          "lon",
+          "platforms"
+        ]
+      },
+      "PlatformDetail": {
+        "type": "object",
+        "properties": {
+          "stop_id": {
+            "type": "string"
+          },
+          "direction": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "stop_id",
+          "direction"
+        ]
+      },
+      "RouteListResponse": {
+        "type": "object",
+        "properties": {
+          "routes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Route"
+            }
+          }
+        },
+        "required": [
+          "routes"
+        ]
+      },
+      "Route": {
+        "type": "object",
+        "properties": {
+          "feed_id": {
+            "type": "string",
+            "enum": [
+              "subway",
+              "lirr",
+              "mnr"
+            ],
+            "description": "Transit feed identifier",
+            "example": "subway"
+          },
+          "route_id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "long_name": {
+            "type": "string"
+          },
+          "color": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "feed_id",
+          "route_id",
+          "name",
+          "long_name",
+          "color"
+        ]
+      },
+      "ArrivalResponse": {
+        "type": "object",
+        "properties": {
+          "feed_id": {
+            "type": "string",
+            "enum": [
+              "subway",
+              "lirr",
+              "mnr"
+            ],
+            "description": "Transit feed identifier",
+            "example": "subway"
+          },
+          "stop_id": {
+            "type": "string"
+          },
+          "stop_name": {
+            "type": "string"
+          },
+          "direction": {
+            "type": "string"
+          },
+          "generated_at": {
+            "type": "number",
+            "description": "Unix timestamp when the feed was generated"
+          },
+          "stale": {
+            "type": "boolean"
+          },
+          "feed_error": {
+            "type": "string"
+          },
+          "arrivals": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Arrival"
+            }
+          }
+        },
+        "required": [
+          "feed_id",
+          "stop_id",
+          "stop_name",
+          "generated_at",
+          "stale",
+          "arrivals"
+        ]
+      },
+      "Arrival": {
+        "type": "object",
+        "properties": {
+          "feed_id": {
+            "type": "string",
+            "enum": [
+              "subway",
+              "lirr",
+              "mnr"
+            ],
+            "description": "Transit feed identifier",
+            "example": "subway"
+          },
+          "route_id": {
+            "type": "string"
+          },
+          "trip_id": {
+            "type": "string"
+          },
+          "arrival_time": {
+            "type": "number",
+            "description": "Unix timestamp of arrival"
+          },
+          "arrival_in_seconds": {
+            "type": "number"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "INCOMING_AT",
+              "STOPPED_AT",
+              "IN_TRANSIT_TO"
+            ]
+          }
+        },
+        "required": [
+          "feed_id",
+          "route_id",
+          "trip_id",
+          "arrival_time",
+          "arrival_in_seconds",
+          "status"
+        ]
+      },
+      "VehicleListResponse": {
+        "type": "object",
+        "properties": {
+          "feed_id": {
+            "type": "string",
+            "enum": [
+              "subway",
+              "lirr",
+              "mnr"
+            ],
+            "description": "Transit feed identifier",
+            "example": "subway"
+          },
+          "route_id": {
+            "type": "string"
+          },
+          "generated_at": {
+            "type": "number"
+          },
+          "vehicles": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Vehicle"
+            }
+          }
+        },
+        "required": [
+          "feed_id",
+          "route_id",
+          "generated_at",
+          "vehicles"
+        ]
+      },
+      "Vehicle": {
+        "type": "object",
+        "properties": {
+          "feed_id": {
+            "type": "string",
+            "enum": [
+              "subway",
+              "lirr",
+              "mnr"
+            ],
+            "description": "Transit feed identifier",
+            "example": "subway"
+          },
+          "trip_id": {
+            "type": "string"
+          },
+          "current_stop_id": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "INCOMING_AT",
+              "STOPPED_AT",
+              "IN_TRANSIT_TO"
+            ]
+          },
+          "timestamp": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "feed_id",
+          "trip_id",
+          "current_stop_id",
+          "status",
+          "timestamp"
+        ]
+      },
+      "AlertListResponse": {
+        "type": "object",
+        "properties": {
+          "generated_at": {
+            "type": "number"
+          },
+          "stale": {
+            "type": "boolean"
+          },
+          "feed_error": {
+            "type": "string"
+          },
+          "alerts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Alert"
+            }
+          }
+        },
+        "required": [
+          "generated_at",
+          "stale",
+          "alerts"
+        ]
+      },
+      "Alert": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "informed_entities": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InformedEntity"
+            },
+            "description": "Per-entry impact selectors preserving the (route, stop, direction) pairing from the upstream feed."
+          },
+          "header": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "active_periods": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ActivePeriod"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "informed_entities",
+          "header",
+          "description",
+          "active_periods"
+        ]
+      },
+      "InformedEntity": {
+        "type": "object",
+        "properties": {
+          "agency_id": {
+            "type": "string"
+          },
+          "route_id": {
+            "type": "string"
+          },
+          "stop_id": {
+            "type": "string"
+          },
+          "direction_id": {
+            "anyOf": [
+              {
+                "type": "number",
+                "enum": [
+                  0
+                ]
+              },
+              {
+                "type": "number",
+                "enum": [
+                  1
+                ]
+              }
+            ],
+            "description": "Affected direction of travel: 0 = Northbound, 1 = Southbound. Omitted when impact applies to both directions."
+          }
+        }
+      },
+      "ActivePeriod": {
+        "type": "object",
+        "properties": {
+          "start": {
+            "type": "number"
+          },
+          "end": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "start",
+          "end"
+        ]
+      },
+      "HealthResponse": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok"
+            ]
+          },
+          "totals": {
+            "type": "object",
+            "properties": {
+              "stop_count": {
+                "type": "number"
+              },
+              "route_count": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "stop_count",
+              "route_count"
+            ]
+          },
+          "static_feeds": {
+            "type": "object",
+            "properties": {
+              "subway": {
+                "$ref": "#/components/schemas/FeedHealth"
+              },
+              "lirr": {
+                "$ref": "#/components/schemas/FeedHealth"
+              },
+              "mnr": {
+                "$ref": "#/components/schemas/FeedHealth"
+              }
+            },
+            "required": [
+              "subway",
+              "lirr",
+              "mnr"
+            ]
+          }
+        },
+        "required": [
+          "status",
+          "totals",
+          "static_feeds"
+        ]
+      },
+      "FeedHealth": {
+        "type": "object",
+        "properties": {
+          "last_synced": {
+            "type": "number",
+            "nullable": true
+          },
+          "stop_count": {
+            "type": "number"
+          },
+          "route_count": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "last_synced",
+          "stop_count",
+          "route_count"
+        ]
+      }
+    },
+    "parameters": {}
+  },
+  "paths": {
+    "/stops": {
+      "get": {
+        "tags": [
+          "Stops"
+        ],
+        "summary": "List or search stops",
+        "description": "Returns stops filtered by name, proximity, or feed. Provide `lat`+`lon` for proximity search, `q` for name search, or neither for all stops.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "description": "Search stops by name"
+            },
+            "required": false,
+            "description": "Search stops by name",
+            "name": "q",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "number",
+              "nullable": true,
+              "description": "Latitude for proximity search",
+              "example": 40.7484
+            },
+            "required": false,
+            "description": "Latitude for proximity search",
+            "name": "lat",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "number",
+              "nullable": true,
+              "description": "Longitude for proximity search",
+              "example": -73.9967
+            },
+            "required": false,
+            "description": "Longitude for proximity search",
+            "name": "lon",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "subway",
+                "lirr",
+                "mnr"
+              ],
+              "description": "Filter by feed"
+            },
+            "required": false,
+            "description": "Filter by feed",
+            "name": "feed",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "number",
+              "minimum": 0,
+              "exclusiveMinimum": true,
+              "maximum": 1600,
+              "default": 400,
+              "description": "Search radius in meters (max 1600, default 400)",
+              "example": 400
+            },
+            "required": false,
+            "description": "Search radius in meters (max 1600, default 400)",
+            "name": "radius",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "exclusiveMinimum": true,
+              "default": 20,
+              "description": "Max results (clamped to 50, default 20)",
+              "example": 20
+            },
+            "required": false,
+            "description": "Max results (clamped to 50, default 20)",
+            "name": "limit",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of stops",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StopListResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid parameters",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stops/{stop_id}": {
+      "get": {
+        "tags": [
+          "Stops"
+        ],
+        "summary": "Get stop by ID",
+        "description": "Returns full details for a stop including platform directions. For subway stops, resolves to the parent station.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "description": "Stop ID",
+              "example": "127"
+            },
+            "required": true,
+            "description": "Stop ID",
+            "name": "stop_id",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "subway",
+                "lirr",
+                "mnr"
+              ],
+              "description": "Feed the stop belongs to"
+            },
+            "required": true,
+            "description": "Feed the stop belongs to",
+            "name": "feed",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Stop detail",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StopDetail"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid parameters",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Stop not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/routes": {
+      "get": {
+        "tags": [
+          "Routes"
+        ],
+        "summary": "List routes",
+        "description": "Returns all routes, optionally filtered by feed.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "subway",
+                "lirr",
+                "mnr"
+              ],
+              "description": "Filter by feed"
+            },
+            "required": false,
+            "description": "Filter by feed",
+            "name": "feed",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of routes",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RouteListResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid feed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/routes/{route_id}": {
+      "get": {
+        "tags": [
+          "Routes"
+        ],
+        "summary": "Get route by ID",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "description": "Route ID",
+              "example": "A"
+            },
+            "required": true,
+            "description": "Route ID",
+            "name": "route_id",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "subway",
+                "lirr",
+                "mnr"
+              ],
+              "description": "Feed the route belongs to"
+            },
+            "required": true,
+            "description": "Feed the route belongs to",
+            "name": "feed",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Route detail",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Route"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid parameters",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Route not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/arrivals": {
+      "get": {
+        "tags": [
+          "Arrivals"
+        ],
+        "summary": "Get arrivals for a stop",
+        "description": "Returns upcoming train arrivals at a stop from the GTFS-RT feed.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "description": "Stop ID",
+              "example": "127N"
+            },
+            "required": true,
+            "description": "Stop ID",
+            "name": "stop",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "subway",
+                "lirr",
+                "mnr"
+              ],
+              "description": "Feed the stop belongs to"
+            },
+            "required": true,
+            "description": "Feed the stop belongs to",
+            "name": "feed",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "exclusiveMinimum": true,
+              "default": 5,
+              "description": "Max arrivals to return (clamped to 50, default 5)",
+              "example": 5
+            },
+            "required": false,
+            "description": "Max arrivals to return (clamped to 50, default 5)",
+            "name": "limit",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "description": "Comma-separated route IDs to filter by",
+              "example": "A,C,E"
+            },
+            "required": false,
+            "description": "Comma-separated route IDs to filter by",
+            "name": "routes",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Upcoming arrivals",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArrivalResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid parameters",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Stop not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Feed unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/vehicles": {
+      "get": {
+        "tags": [
+          "Vehicles"
+        ],
+        "summary": "Get active vehicles for a route",
+        "description": "Returns current vehicle positions for all active trips on a route from the GTFS-RT feed.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "description": "Route ID",
+              "example": "A"
+            },
+            "required": true,
+            "description": "Route ID",
+            "name": "route",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "subway",
+                "lirr",
+                "mnr"
+              ],
+              "description": "Feed the route belongs to"
+            },
+            "required": true,
+            "description": "Feed the route belongs to",
+            "name": "feed",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Active vehicles",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VehicleListResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid parameters",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Route not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Feed unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/alerts": {
+      "get": {
+        "tags": [
+          "Alerts"
+        ],
+        "summary": "Get service alerts",
+        "description": "Returns active MTA service alerts, optionally filtered by route or stop.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "description": "Comma-separated route IDs to filter alerts by",
+              "example": "A,C"
+            },
+            "required": false,
+            "description": "Comma-separated route IDs to filter alerts by",
+            "name": "routes",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "description": "Filter alerts affecting a specific stop",
+              "example": "127"
+            },
+            "required": false,
+            "description": "Filter alerts affecting a specific stop",
+            "name": "stop_id",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "0",
+                "1",
+                "N",
+                "S"
+              ],
+              "description": "Filter alerts by direction of travel at the given stop. N or 0 = Northbound, S or 1 = Southbound. Only applies in combination with stop_id.",
+              "example": "S"
+            },
+            "required": false,
+            "description": "Filter alerts by direction of travel at the given stop. N or 0 = Northbound, S or 1 = Southbound. Only applies in combination with stop_id.",
+            "name": "direction",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Service alerts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AlertListResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Alerts feed unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "tags": [
+          "Health"
+        ],
+        "summary": "API health and feed status",
+        "description": "Returns server status and per-feed static data counts and sync timestamps.",
+        "responses": {
+          "200": {
+            "description": "Health status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
