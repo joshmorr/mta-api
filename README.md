@@ -219,6 +219,16 @@ GET /routes/A?feed=subway
 GET /routes/1?feed=lirr
 ```
 
+```json
+{
+  "feed_id": "subway",
+  "route_id": "A",
+  "name": "A",
+  "long_name": "Eighth Avenue Local",
+  "color": "0039A6"
+}
+```
+
 ---
 
 ### `GET /vehicles`
