@@ -7,6 +7,45 @@ A REST API over the MTA's GTFS static and realtime feeds. Handles protobuf parsi
 
 ---
 
+## How it works
+
+The API sits between two upstream sources — one batch, one realtime — and a REST client that knows nothing about GTFS or protobuf.
+
+```
+                    ┌──────────────────────────────────────────────────┐
+   MTA upstream     │                     mta-api                       │   client
+                    │                                                   │
+ GTFS static ZIPs ──┼─▶ fetch ─▶ unzip ─▶ parse CSV ─▶ SQLite ─────────┼─┐
+ (S3, batch)        │            (fflate)  (papaparse)  (bun:sqlite)    │ │
+                    │                                                   │ ├─▶ JSON
+ GTFS-RT protobuf ──┼─▶ fetch ─▶ decode ─▶ in-memory cache ────────────┼─┘
+ (api-endpoint.mta.info, on-demand)  (protobufjs)  (rtCache, 20s TTL)   │
+                    │              join static + realtime at read time  │
+                    └──────────────────────────────────────────────────┘
+```
+
+Two data layers with completely different lifecycles and storage:
+
+- **Static GTFS → SQLite.** Slow-changing reference data (stops, routes, trips, schedules) downloaded as ZIPs, parsed, and bulk-inserted. Refreshed on a timer — subway hourly, rail daily. Every row is tagged with its `feed_id` because the MTA reuses raw IDs across subway/LIRR/MNR.
+- **Realtime GTFS-RT → in-memory cache.** Fast-changing live data (arrival predictions, vehicle positions, alerts) fetched on demand, decoded from protobuf, and held in a short-lived 20s cache. Never touches SQLite.
+
+The two layers meet only at request time. An arrivals query uses SQLite to decide *which* realtime feeds to fetch and *which* platform IDs to match, then reads predictions from the RT cache:
+
+```
+GET /arrivals?stop=127N&feed=subway
+
+ 1. resolve stop → parent station → platform IDs   ◀── SQLite
+ 2. which routes serve these platforms today?       ◀── SQLite (calendar-aware)
+ 3. map served routes → RT feed paths, dedup        ◀── feed.service
+ 4. fetch each feed path                             ◀── RT cache (protobuf)
+ 5. filter stop-time updates to matching platforms
+ 6. derive arrival_in_seconds, normalize status     ──▶ JSON
+```
+
+The throughline: strip the GTFS/protobuf complexity, tag everything with its feed, and serve plain JSON.
+
+---
+
 ## Quick start
 
 ```sh
