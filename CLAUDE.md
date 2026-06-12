@@ -74,10 +74,6 @@ Subway routes map to specific RT feed paths (e.g. A/C/E → `nyct/gtfs-ace`). Th
 
 Schema DDL lives in `src/db/schema.ts` as `CREATE TABLE IF NOT EXISTS` statements. `runMigrations()` in `src/db/client.ts` runs them on startup. For breaking column changes, add detection logic to `runMigrations()` alongside the existing `hasColumn` check (see the `feed_id` migration as an example).
 
-## Git workflow
-
-Never commit to `main` directly. Create a feature branch (e.g. `git checkout -b <type>/<short-desc>`) and open a GitHub PR with `gh pr create`.
-
 ## Git commits
 
 Always use the [Conventional Commits](https://www.conventionalcommits.org/) spec:
