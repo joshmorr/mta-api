@@ -20,6 +20,10 @@ function createDb(): Database {
   const db = new Database(config.dbPath, { create: true });
   db.run('PRAGMA journal_mode = WAL');
   db.run('PRAGMA foreign_keys = ON');
+  // Two connections now share the DB file (main thread reads, sync worker writes).
+  // WAL already permits concurrent reader+writer; this is defensive against
+  // transient SQLITE_BUSY (e.g. during a WAL checkpoint).
+  db.run('PRAGMA busy_timeout = 5000');
   return db;
 }
 

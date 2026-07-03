@@ -160,10 +160,12 @@ export const FeedHealthSchema = z.object({
   last_synced: z.number().nullable(),
   stop_count: z.number(),
   route_count: z.number(),
+  syncing: z.boolean().openapi({ description: 'True while this feed is currently being synced in the background.' }),
 }).openapi('FeedHealth');
 
 export const HealthResponseSchema = z.object({
   status: z.literal('ok'),
+  syncing: z.boolean().openapi({ description: 'True while any static feed is currently being synced in the background.' }),
   totals: z.object({
     stop_count: z.number(),
     route_count: z.number(),
