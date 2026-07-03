@@ -24,16 +24,19 @@ primary_region = 'ewr'
   force_https = true
   auto_stop_machines = 'stop'
   auto_start_machines = true
-  # Keep one machine warm so cold starts don't repeatedly re-fire the static
-  # feed sync (which now runs off-thread but still burns bandwidth/CPU).
-  min_machines_running = 1
+  # Run 2+ machines for resilience: a host failure or a rolling deploy leaves at
+  # least one instance serving. Each machine owns its own volume/DB, so they are
+  # independent read replicas — no shared state to coordinate.
+  min_machines_running = 2
 
-  # /health responds instantly even during a sync (sync runs on a worker thread),
-  # so Fly can detect and restart a genuinely wedged machine.
+  # /health is a readiness probe: it returns 503 while an instance is still
+  # seeding its (empty) DB, so the LB won't route to a not-ready machine. The
+  # grace period must cover a first-boot seed (~2-3 min on a fresh volume);
+  # after that /health flips to 200 and a genuinely wedged machine is detected.
   [[http_service.checks]]
     interval     = '15s'
     timeout      = '5s'
-    grace_period = '30s'
+    grace_period = '240s'
     method       = 'get'
     path         = '/health'
 
