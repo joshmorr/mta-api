@@ -24,7 +24,18 @@ primary_region = 'ewr'
   force_https = true
   auto_stop_machines = 'stop'
   auto_start_machines = true
-  min_machines_running = 0
+  # Keep one machine warm so cold starts don't repeatedly re-fire the static
+  # feed sync (which now runs off-thread but still burns bandwidth/CPU).
+  min_machines_running = 1
+
+  # /health responds instantly even during a sync (sync runs on a worker thread),
+  # so Fly can detect and restart a genuinely wedged machine.
+  [[http_service.checks]]
+    interval     = '15s'
+    timeout      = '5s'
+    grace_period = '30s'
+    method       = 'get'
+    path         = '/health'
 
 [[vm]]
   size = 'shared-cpu-1x'

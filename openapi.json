@@ -480,6 +480,10 @@
               "ok"
             ]
           },
+          "syncing": {
+            "type": "boolean",
+            "description": "True while any static feed is currently being synced in the background."
+          },
           "totals": {
             "type": "object",
             "properties": {
@@ -517,6 +521,7 @@
         },
         "required": [
           "status",
+          "syncing",
           "totals",
           "static_feeds"
         ]
@@ -533,12 +538,17 @@
           },
           "route_count": {
             "type": "number"
+          },
+          "syncing": {
+            "type": "boolean",
+            "description": "True while this feed is currently being synced in the background."
           }
         },
         "required": [
           "last_synced",
           "stop_count",
-          "route_count"
+          "route_count",
+          "syncing"
         ]
       }
     },

@@ -1,12 +1,7 @@
 import { runMigrations } from './db/client';
 import { config } from './config';
-import {
-  syncSubwayFeed,
-  syncLirrFeed,
-  syncMnrFeed,
-  isDbEmpty,
-  isFeedStale,
-} from './services/static.service';
+import { isDbEmpty, isFeedStale } from './services/static.service';
+import { requestSync } from './services/syncManager';
 import { state } from './state';
 
 export async function startup() {
@@ -15,29 +10,29 @@ export async function startup() {
   if (isDbEmpty()) {
     console.log('[startup] DB is empty — seeding all feeds in background...');
     state.seeding = true;
-    syncSubwayFeed()
-      .then(() => syncLirrFeed())
-      .then(() => syncMnrFeed())
+    requestSync('subway')
+      .then(() => requestSync('lirr'))
+      .then(() => requestSync('mnr'))
       .catch((e) => console.error('[startup] initial seed error:', e))
       .finally(() => { state.seeding = false; });
   } else {
     if (isFeedStale('subway', config.subwaySyncIntervalMs)) {
-      syncSubwayFeed().catch((e) => console.error('[startup] subway sync error:', e));
+      requestSync('subway').catch((e) => console.error('[startup] subway sync error:', e));
     }
     if (isFeedStale('lirr', config.railSyncIntervalMs)) {
-      syncLirrFeed().catch((e) => console.error('[startup] lirr sync error:', e));
+      requestSync('lirr').catch((e) => console.error('[startup] lirr sync error:', e));
     }
     if (isFeedStale('mnr', config.railSyncIntervalMs)) {
-      syncMnrFeed().catch((e) => console.error('[startup] mnr sync error:', e));
+      requestSync('mnr').catch((e) => console.error('[startup] mnr sync error:', e));
     }
   }
 
   setInterval(() => {
-    syncSubwayFeed().catch((e) => console.error('[sync] subway error:', e));
+    requestSync('subway').catch((e) => console.error('[sync] subway error:', e));
   }, config.subwaySyncIntervalMs);
 
   setInterval(() => {
-    syncLirrFeed().catch((e) => console.error('[sync] lirr error:', e));
-    syncMnrFeed().catch((e) => console.error('[sync] mnr error:', e));
+    requestSync('lirr').catch((e) => console.error('[sync] lirr error:', e));
+    requestSync('mnr').catch((e) => console.error('[sync] mnr error:', e));
   }, config.railSyncIntervalMs);
 }
