@@ -477,8 +477,10 @@
           "status": {
             "type": "string",
             "enum": [
-              "ok"
-            ]
+              "ok",
+              "seeding"
+            ],
+            "description": "'seeding' (with HTTP 503) while the initial data load is in progress and the instance cannot serve requests yet; 'ok' otherwise."
           },
           "syncing": {
             "type": "boolean",
@@ -1120,10 +1122,20 @@
         ],
         "operationId": "getHealth",
         "summary": "API health and feed status",
-        "description": "Returns server status and per-feed static data counts and sync timestamps.",
+        "description": "Returns server status and per-feed static data counts and sync timestamps. Responds 503 while the initial data load is in progress (the instance cannot serve requests yet); load balancers should treat it as a readiness probe.",
         "responses": {
           "200": {
-            "description": "Health status",
+            "description": "Ready to serve requests",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Seeding initial data; not ready",
             "content": {
               "application/json": {
                 "schema": {

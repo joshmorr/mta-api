@@ -1,7 +1,8 @@
 # Readiness probe. Run with `--retry` so the runner blocks until the server is
-# actually serving data. Important: /health returns 200 the moment the port
-# binds, but the seeding gate (src/index.ts) makes every OTHER route return
-# 503 SEEDING until the background seed of all feeds completes. So we probe a
-# real route here — a 200 means the port is up AND seeding has finished.
-GET {{base}}/routes?feed=subway
+# actually serving data. /health is a readiness probe: it returns 503 while the
+# background seed of all feeds is still running and flips to 200 ("ok") only
+# once the instance can serve real routes. A 200 here means seeding has finished.
+GET {{base}}/health
 HTTP 200
+[Asserts]
+jsonpath "$.status" == "ok"

@@ -12,17 +12,26 @@ const getHealthRoute = createRoute({
   tags: ['Health'],
   operationId: 'getHealth',
   summary: 'API health and feed status',
-  description: 'Returns server status and per-feed static data counts and sync timestamps.',
+  description:
+    'Returns server status and per-feed static data counts and sync timestamps. ' +
+    'Responds 503 while the initial data load is in progress (the instance cannot ' +
+    'serve requests yet); load balancers should treat it as a readiness probe.',
   responses: {
-    200: { content: { 'application/json': { schema: HealthResponseSchema } }, description: 'Health status' },
+    200: { content: { 'application/json': { schema: HealthResponseSchema } }, description: 'Ready to serve requests' },
+    503: { content: { 'application/json': { schema: HealthResponseSchema } }, description: 'Seeding initial data; not ready' },
   },
 });
 
 healthRouter.openapi(getHealthRoute, (c) => {
   const counts = getDbCounts();
 
+  // While `seeding` is true (empty-DB first boot) every real endpoint 503s, so
+  // fail the readiness probe to keep the load balancer from routing here until
+  // the initial load finishes. A background refresh (`syncing`) still serves fine.
+  const ready = !state.seeding;
+
   return c.json({
-    status: 'ok' as const,
+    status: ready ? ('ok' as const) : ('seeding' as const),
     syncing: state.syncing.subway || state.syncing.lirr || state.syncing.mnr,
     totals: {
       stop_count: counts.totalStops,
@@ -48,5 +57,5 @@ healthRouter.openapi(getHealthRoute, (c) => {
         syncing: state.syncing.mnr,
       },
     },
-  }, 200 as const);
+  }, ready ? (200 as const) : (503 as const));
 });

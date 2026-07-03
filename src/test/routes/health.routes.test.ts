@@ -56,6 +56,18 @@ describe('GET /health', () => {
     expect(body.static_feeds.lirr.last_synced).toBeNull();
   });
 
+  it('fails readiness with 503 and status "seeding" while the initial seed runs', async () => {
+    state.seeding = true;
+    try {
+      const res = await app.request('/health');
+      expect(res.status).toBe(503);
+      const body = (await res.json()) as HealthBody;
+      expect(body.status).toBe('seeding');
+    } finally {
+      state.seeding = false;
+    }
+  });
+
   it('surfaces in-progress syncs from state', async () => {
     state.syncing.subway = true;
 

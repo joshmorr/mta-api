@@ -164,7 +164,7 @@ export const FeedHealthSchema = z.object({
 }).openapi('FeedHealth');
 
 export const HealthResponseSchema = z.object({
-  status: z.literal('ok'),
+  status: z.enum(['ok', 'seeding']).openapi({ description: "'seeding' (with HTTP 503) while the initial data load is in progress and the instance cannot serve requests yet; 'ok' otherwise." }),
   syncing: z.boolean().openapi({ description: 'True while any static feed is currently being synced in the background.' }),
   totals: z.object({
     stop_count: z.number(),
