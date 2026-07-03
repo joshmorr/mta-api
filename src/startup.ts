@@ -7,6 +7,11 @@ import { state } from './state';
 export async function startup() {
   runMigrations();
 
+  if (!config.syncEnabled) {
+    console.log('[startup] SYNC_ENABLED=false — this instance will not sync static feeds (read-only).');
+    return;
+  }
+
   if (isDbEmpty()) {
     console.log('[startup] DB is empty — seeding all feeds in background...');
     state.seeding = true;

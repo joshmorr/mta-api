@@ -40,6 +40,7 @@ Copy `.env.example` to `.env`. All have defaults so the server starts without on
 | `STATIC_FETCH_TIMEOUT_MS` | `60000` | Upstream static GTFS zip fetch timeout (abort) |
 | `SUBWAY_SYNC_INTERVAL_MS` | `3600000` | 1 hour |
 | `RAIL_SYNC_INTERVAL_MS` | `86400000` | 24 hours |
+| `SYNC_ENABLED` | `true` | Set `false` to make an instance read-only (no static sync) |
 
 ## Architecture
 
