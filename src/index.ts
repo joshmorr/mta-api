@@ -7,12 +7,14 @@ import { startup } from './startup';
 import { state } from './state';
 import { stopsRouter, routesRouter, arrivalsRouter, vehiclesRouter, alertsRouter, healthRouter } from './routes';
 import { rateLimit } from './middleware/rateLimit';
+import { cacheHeaders } from './middleware/cacheHeaders';
 import { openApiDocConfig } from './openapi';
 
 const app = new OpenAPIHono();
 
 app.use('*', logger());
 app.use('*', timing());
+app.use('*', cacheHeaders);
 app.use('*', rateLimit);
 app.use('*', async (c, next) => {
   if (state.seeding && c.req.path !== '/health') {
