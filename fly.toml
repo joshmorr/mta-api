@@ -30,13 +30,15 @@ primary_region = 'ewr'
   min_machines_running = 2
 
   # /health is a readiness probe: it returns 503 while an instance is still
-  # seeding its (empty) DB, so the LB won't route to a not-ready machine. The
-  # grace period must cover a first-boot seed (~2-3 min on a fresh volume);
-  # after that /health flips to 200 and a genuinely wedged machine is detected.
+  # seeding its (empty) DB, so the LB won't route to a not-ready machine.
+  # 60s is Fly's max grace for HTTP checks — it can't cover a first-boot seed
+  # (~2-3 min on a fresh volume), so provision new machines/volumes OUT of the
+  # deploy path (`fly scale count` / `machine clone`) and let them seed while
+  # unhealthy/out-of-rotation. Redeploys of a populated volume go 200 instantly.
   [[http_service.checks]]
     interval     = '15s'
     timeout      = '5s'
-    grace_period = '240s'
+    grace_period = '60s'
     method       = 'get'
     path         = '/health'
 
