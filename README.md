@@ -308,16 +308,17 @@ Each `informed_entity` entry is an independent selector — fields within one en
 
 ### `GET /health`
 
-API status and per-feed static data counts.
+API status and per-feed static data counts. `syncing` (top-level, and per feed) is `true` while a static feed is being refreshed in the background; `/health` always responds immediately because the sync runs on a separate worker thread.
 
 ```json
 {
   "status": "ok",
+  "syncing": false,
   "totals": { "stop_count": 1729, "route_count": 48 },
   "static_feeds": {
-    "subway": { "last_synced": 1773602000, "stop_count": 1488, "route_count": 29 },
-    "lirr":   { "last_synced": 1773602000, "stop_count": 127,  "route_count": 13 },
-    "mnr":    { "last_synced": 1773602000, "stop_count": 114,  "route_count": 6  }
+    "subway": { "last_synced": 1773602000, "stop_count": 1488, "route_count": 29, "syncing": false },
+    "lirr":   { "last_synced": 1773602000, "stop_count": 127,  "route_count": 13, "syncing": false },
+    "mnr":    { "last_synced": 1773602000, "stop_count": 114,  "route_count": 6,  "syncing": false }
   }
 }
 ```

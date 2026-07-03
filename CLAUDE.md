@@ -45,7 +45,7 @@ Copy `.env.example` to `.env`. All have defaults so the server starts without on
 
 ### Two data layers
 
-1. **Static GTFS** — SQLite (`bun:sqlite`). Stops, routes, trips, stop_times, calendar tables. Populated by downloading ZIP files from MTA S3, unzipping with `fflate`, parsing CSV with `papaparse`, and bulk-inserting. Auto-refreshes on intervals (subway hourly, rail daily). All tables are keyed by `(feed_id, ...)` because the MTA reuses IDs across feeds.
+1. **Static GTFS** — SQLite (`bun:sqlite`). Stops, routes, trips, stop_times, calendar tables. Populated by downloading ZIP files from MTA S3, unzipping with `fflate`, parsing CSV with `papaparse`, and bulk-inserting. The download→unzip→parse→insert is entirely synchronous (and heavy — subway `stop_times` is ~2.4M rows), so it runs on a **Worker thread** (`src/services/syncWorker.ts`, dispatched from the main thread via `src/services/syncManager.ts`) to keep it off the HTTP event loop. The worker opens its own `bun:sqlite` connection; WAL mode lets it write while the main thread reads. `startup.ts` calls `requestSync(feed)` instead of the sync functions directly (those stay in `static.service.ts`, still used in-thread by `scripts/seed.ts` and tests). Auto-refreshes on intervals (subway hourly, rail daily). All tables are keyed by `(feed_id, ...)` because the MTA reuses IDs across feeds.
 
 2. **Realtime GTFS-RT** — In-memory cache (`src/cache/rtCache.ts`). Binary protobuf decoded via `protobufjs` from `src/proto/gtfs-realtime.proto`. Fetched on demand with a 20s TTL. Promise deduplication prevents parallel upstream fetches for the same feed path. Stale cache is served with `stale: true` when upstream fails.
 
