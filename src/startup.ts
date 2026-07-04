@@ -1,11 +1,14 @@
 import { runMigrations } from './db/client';
 import { config } from './config';
 import { isDbEmpty, isFeedStale } from './services/static.service';
+import { refreshHealthCache } from './services/healthCache';
 import { requestSync } from './services/syncManager';
 import { state } from './state';
 
 export async function startup() {
   runMigrations();
+  // Prime the /health cache from whatever is already on disk before serving.
+  refreshHealthCache();
 
   if (!config.syncEnabled) {
     console.log('[startup] SYNC_ENABLED=false — this instance will not sync static feeds (read-only).');

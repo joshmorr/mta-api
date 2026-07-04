@@ -35,9 +35,12 @@ primary_region = 'ewr'
   # (~2-3 min on a fresh volume), so provision new machines/volumes OUT of the
   # deploy path (`fly scale count` / `machine clone`) and let them seed while
   # unhealthy/out-of-rotation. Redeploys of a populated volume go 200 instantly.
+  # /health reads only in-memory state (no SQLite), so it responds in well under a
+  # second even while a background sync saturates the shared vCPU. The 10s timeout
+  # is headroom for GC/cold pauses, not for query latency.
   [[http_service.checks]]
     interval     = '15s'
-    timeout      = '5s'
+    timeout      = '10s'
     grace_period = '60s'
     method       = 'get'
     path         = '/health'

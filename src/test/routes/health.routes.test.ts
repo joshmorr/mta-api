@@ -2,6 +2,7 @@ import { describe, expect, it, beforeEach } from 'bun:test';
 import { healthRouter } from '../../routes/health.routes';
 import { makeTestApp } from '../helpers/app';
 import { setFeedMeta } from '../../db/queries/staticFeed';
+import { refreshHealthCache } from '../../services/healthCache';
 import { resetDb, seedSubway, seedLirr } from '../helpers/seed';
 import { state } from '../../state';
 
@@ -20,6 +21,8 @@ type HealthBody = {
 describe('GET /health', () => {
   beforeEach(() => {
     resetDb();
+    // /health serves cached counts; reset the cache to reflect the emptied DB.
+    refreshHealthCache();
     state.syncing.subway = false;
     state.syncing.lirr = false;
     state.syncing.mnr = false;
@@ -41,6 +44,7 @@ describe('GET /health', () => {
     seedSubway();
     seedLirr();
     setFeedMeta('subway');
+    refreshHealthCache();
 
     const res = await app.request('/health');
     const body = (await res.json()) as HealthBody;

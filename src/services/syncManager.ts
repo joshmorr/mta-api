@@ -7,6 +7,7 @@
  * The Worker is spawned lazily on the first requestSync, so merely importing this
  * module (e.g. in tests, or transitively) never starts a thread.
  */
+import { refreshHealthCache } from './healthCache';
 import { state } from '../state';
 import type { FeedId } from '../types/gtfs';
 
@@ -36,8 +37,14 @@ export function createSyncManager(factory: WorkerFactory = defaultFactory) {
     if (!entry) return;
     pending.delete(reply.id);
     state.syncing[entry.feed] = false;
-    if (reply.ok) entry.resolve();
-    else entry.reject(new Error(reply.error ?? `sync ${entry.feed} failed`));
+    if (reply.ok) {
+      // The worker just wrote new data — refresh the cached /health counts once,
+      // off the probe's hot path.
+      refreshHealthCache();
+      entry.resolve();
+    } else {
+      entry.reject(new Error(reply.error ?? `sync ${entry.feed} failed`));
+    }
   }
 
   /** Reject every in-flight request and drop the worker so the next call respawns. */
