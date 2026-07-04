@@ -45,6 +45,11 @@ primary_region = 'ewr'
     method       = 'get'
     path         = '/health'
 
+# 2 vCPUs so the static-sync Worker thread (heavy: 2.4M-row subway import) runs
+# on its own core instead of starving the main HTTP event loop. On a single-vCPU
+# machine the Worker and event loop contend for one core, stalling /health past
+# the check timeout during a sync — the whole point of the Worker is to keep that
+# work off the request path, which only holds with a spare core.
 [[vm]]
-  size = 'shared-cpu-1x'
+  size = 'shared-cpu-2x'
   memory = '1gb'
