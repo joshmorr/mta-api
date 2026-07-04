@@ -35,13 +35,26 @@ primary_region = 'ewr'
   # (~2-3 min on a fresh volume), so provision new machines/volumes OUT of the
   # deploy path (`fly scale count` / `machine clone`) and let them seed while
   # unhealthy/out-of-rotation. Redeploys of a populated volume go 200 instantly.
+  # /health reads only in-memory state (no SQLite), so it responds in well under a
+  # second even while a background sync saturates the shared vCPU. The 10s timeout
+  # is headroom for GC/cold pauses, not for query latency.
   [[http_service.checks]]
     interval     = '15s'
-    timeout      = '5s'
+    timeout      = '10s'
     grace_period = '60s'
     method       = 'get'
     path         = '/health'
 
+# 2 vCPUs so the static-sync Worker thread (heavy: 2.4M-row subway import) runs
+# on its own core instead of starving the main HTTP event loop. On a single-vCPU
+# machine the Worker and event loop contend for one core, stalling /health past
+# the check timeout during a sync — the whole point of the Worker is to keep that
+# work off the request path, which only holds with a spare core.
+# 2GB: the subway sync peaks at ~1.33GB RSS (2.4M stop_times decoded + parsed +
+# bulk-inserted). On 1GB it blew the memory ceiling, OOM-thrashed, and never
+# completed — which is why subway's last_synced sat frozen for months while
+# LIRR/MNR (tens of thousands of rows) always finished. 2 vCPUs keeps the sync
+# Worker off the HTTP event loop's core.
 [[vm]]
-  size = 'shared-cpu-1x'
-  memory = '1gb'
+  size = 'shared-cpu-2x'
+  memory = '2gb'
