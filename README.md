@@ -357,13 +357,15 @@ API status and per-feed static data counts. `syncing` (top-level, and per feed) 
 
 ### Static GTFS (SQLite)
 
-| Feed | Source | Refresh |
-|------|--------|---------|
-| Subway | `https://rrgtfsfeeds.s3.amazonaws.com/gtfs_supplemented.zip` | Hourly |
-| LIRR | `https://rrgtfsfeeds.s3.amazonaws.com/gtfslirr.zip` | Daily |
-| Metro-North | `https://rrgtfsfeeds.s3.amazonaws.com/gtfsmnr.zip` | Daily |
+| Feed | Source |
+|------|--------|
+| Subway | `https://rrgtfsfeeds.s3.amazonaws.com/gtfs_supplemented.zip` |
+| LIRR | `https://rrgtfsfeeds.s3.amazonaws.com/gtfslirr.zip` |
+| Metro-North | `https://rrgtfsfeeds.s3.amazonaws.com/gtfsmnr.zip` |
 
 The supplemented subway feed includes service changes for the next 7 days and is preferred over the base feed.
+
+These feeds are the origin of all schedule data, but the running API doesn't fetch them directly. In production a scheduled CI job builds the SQLite DB from them daily and instances download the result (see [Deployment](#deployment)). When an instance syncs the feeds itself instead (`SYNC_ENABLED=true`, the default for local dev), it refreshes subway hourly and rail daily.
 
 ### Realtime GTFS-RT (in-memory, 20s TTL)
 
