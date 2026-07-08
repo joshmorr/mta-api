@@ -1,0 +1,72 @@
+name: Build & publish GTFS DB
+
+# Runs the heavy GTFS static build off-box, publishes a prebuilt mta.db to the
+# Tigris bucket, then rolling-restarts the Fly app so instances pull the new DB.
+# Instances themselves are read-only (SYNC_ENABLED=false) and just download this.
+
+on:
+  schedule:
+    # Daily at 08:00 UTC (~04:00 ET). GTFS static changes rarely; daily is ample.
+    - cron: '0 8 * * *'
+  workflow_dispatch: {}
+
+concurrency:
+  group: build-db
+  cancel-in-progress: false
+
+jobs:
+  build-db:
+    runs-on: ubuntu-latest
+    env:
+      # Bucket name + Fly app are non-secret; store them as repo Variables.
+      BUCKET: ${{ vars.TIGRIS_BUCKET }}
+      FLY_APP: ${{ vars.FLY_APP }}
+      # Tigris S3 credentials (from `fly storage create`) as repo Secrets.
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_ENDPOINT_URL_S3: ${{ secrets.AWS_ENDPOINT_URL_S3 }}
+      AWS_REGION: auto
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build DB from GTFS feeds
+        # Seeds a raw DB (downloads + parses all static feeds), then VACUUM INTO a
+        # clean single-file copy for publishing.
+        run: |
+          mkdir -p build
+          DB_PATH=./build/mta.raw.db bun run seed
+          bun run scripts/vacuum-into.ts ./build/mta.raw.db ./build/mta.db
+          ls -lh ./build/mta.db
+
+      - name: Package artifact
+        # sha256 is of the *uncompressed* DB (fetch-db.ts verifies post-gunzip).
+        # Version marker is the run id + a UTC timestamp for readability.
+        run: |
+          sha256sum ./build/mta.db | cut -d' ' -f1 > ./build/mta.db.sha256
+          printf '%s %s\n' "${GITHUB_RUN_ID}" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > ./build/mta.db.version
+          gzip -9 -c ./build/mta.db > ./build/mta.db.gz
+          ls -lh ./build/mta.db.gz
+          cat ./build/mta.db.version
+
+      - name: Publish to Tigris
+        # Upload the big blob + checksum first; publish the version marker LAST so
+        # a booting instance never sees a new version before its gz is complete.
+        run: |
+          aws s3 cp ./build/mta.db.gz     "s3://${BUCKET}/mta.db.gz"     --endpoint-url "$AWS_ENDPOINT_URL_S3"
+          aws s3 cp ./build/mta.db.sha256 "s3://${BUCKET}/mta.db.sha256" --endpoint-url "$AWS_ENDPOINT_URL_S3"
+          aws s3 cp ./build/mta.db.version "s3://${BUCKET}/mta.db.version" --endpoint-url "$AWS_ENDPOINT_URL_S3"
+
+      - name: Roll the Fly app
+        # Restart machines so they download the freshly published DB on boot.
+        # Rolling across min_machines_running=2 keeps the API serving throughout.
+        uses: superfly/flyctl-actions/setup-flyctl@master
+      - run: flyctl apps restart "$FLY_APP"
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
