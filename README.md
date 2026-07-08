@@ -35,9 +35,37 @@ All options are environment variables. Defaults work out of the box.
 | `RT_CACHE_TTL_MS` | `20000` | Realtime feed cache TTL in milliseconds |
 | `RT_FETCH_TIMEOUT_MS` | `10000` | Upstream realtime fetch timeout in milliseconds |
 | `STATIC_FETCH_TIMEOUT_MS` | `60000` | Upstream static GTFS ZIP fetch timeout in milliseconds |
-| `SUBWAY_SYNC_INTERVAL_MS` | `3600000` | Subway static feed refresh interval (1 hour) |
-| `RAIL_SYNC_INTERVAL_MS` | `86400000` | LIRR/MNR static feed refresh interval (24 hours) |
+| `SUBWAY_SYNC_INTERVAL_MS` | `3600000` | Subway static feed refresh interval (1 hour). Only used when `SYNC_ENABLED=true` |
+| `RAIL_SYNC_INTERVAL_MS` | `86400000` | LIRR/MNR static feed refresh interval (24 hours). Only used when `SYNC_ENABLED=true` |
+| `SYNC_ENABLED` | `true` | When `true`, the instance syncs the feeds itself (local dev / auto-seed). Set `false` in production, where the DB is prebuilt in CI and downloaded on boot |
+| `DB_URL` | _(unset)_ | Bucket base URL to download a prebuilt `mta.db` from on boot (see Deployment). When unset, no download happens |
+| `DB_FETCH_TIMEOUT_MS` | `120000` | Timeout for the boot-time DB download |
 | `LOG_LEVEL` | `info` | Log verbosity: `debug`, `info`, `warn`, `error` |
+
+---
+
+## Deployment
+
+Production runs on [Fly.io](https://fly.io) (`fly.toml`, `Dockerfile`). Instances
+are **read-only**: they don't build the DB themselves. Instead:
+
+1. A scheduled GitHub Actions job (`.github/workflows/build-db.yml`) runs the
+   heavy GTFS build once — it seeds a DB from the feeds, compacts it with
+   `VACUUM INTO`, and publishes a gzipped `mta.db` (plus a version marker and
+   checksum) to a Tigris bucket.
+2. It then rolling-restarts the Fly app.
+3. On boot, each machine's `start.sh` runs `scripts/fetch-db.ts`, which downloads
+   the prebuilt DB into its volume (skipping the transfer when the local copy's
+   version already matches) before the server starts.
+
+This keeps the machines small and their boots fast, and confines the expensive
+2.4M-row import to CI. Instances set `SYNC_ENABLED=false` and `DB_URL=<bucket>`.
+The in-instance sync path still exists for local dev (`bun run seed` /
+`SYNC_ENABLED=true`).
+
+One-time setup: `fly storage create` (Tigris bucket, public-read), mirror the
+`AWS_*` credentials into GitHub Secrets, and add a `FLY_API_TOKEN` secret plus
+`TIGRIS_BUCKET` / `FLY_APP` repo Variables.
 
 ---
 
