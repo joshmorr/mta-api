@@ -1,3 +1,7 @@
+export type FeedId = 'subway' | 'lirr' | 'mnr';
+
+export type VehicleStopStatus = 'INCOMING_AT' | 'STOPPED_AT' | 'IN_TRANSIT_TO';
+
 export interface GtfsStop {
   stop_id: string;
   stop_name: string;
@@ -51,8 +55,6 @@ export interface GtfsCalendarDate {
   exception_type: string;
 }
 
-export type FeedId = 'subway' | 'lirr' | 'mnr';
-
 // GTFS-RT types (decoded from protobufjs)
 export interface FeedMessage {
   header: FeedHeader;
@@ -99,7 +101,7 @@ export interface VehiclePosition {
   trip: TripDescriptor;
   currentStopSequence?: number;
   stopId?: string;
-  currentStatus?: 'INCOMING_AT' | 'STOPPED_AT' | 'IN_TRANSIT_TO';
+  currentStatus?: VehicleStopStatus;
   timestamp?: number | Long;
 }
 
