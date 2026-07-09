@@ -66,12 +66,17 @@ export interface InformedEntity {
   direction_id?: 0 | 1;
 }
 
+export interface ActivePeriod {
+  start: number;
+  end: number;
+}
+
 export interface AlertResponse {
   id: string;
   informed_entities: InformedEntity[];
   header: string;
   description: string;
-  active_periods: { start: number; end: number }[];
+  active_periods: ActivePeriod[];
 }
 
 export interface ErrorResponse {
