@@ -27,6 +27,17 @@ DB_PATH=:memory: sh scripts/hurl.sh hurl/contract.hurl hurl/stops.hurl
 The runner (`scripts/hurl.sh`) boots the server, waits for the seeding gate to
 lift (see below), runs the suites in `--test` mode, then tears the server down.
 
+### Against a deployed instance
+
+Set `BASE_URL` to run any suite(s) against an already-running server instead of
+booting one locally. The runner skips the local boot (and ignores `DB_PATH` /
+`PORT`), pointing `{{base}}` at the remote host:
+
+```sh
+BASE_URL=https://mta-api-restless-pond-4321.fly.dev \
+  sh scripts/hurl.sh hurl/contract.hurl hurl/stops.hurl hurl/realtime.hurl
+```
+
 ## The seeding gate matters
 
 On startup with an empty DB the server seeds all feeds in the background and,
