@@ -40,11 +40,13 @@ BASE_URL=https://mta-api-restless-pond-4321.fly.dev \
 
 ## The seeding gate matters
 
-On startup with an empty DB the server seeds all feeds in the background and,
-until that finishes, returns `503 SEEDING` for every route except `/health`.
-So readiness can't be judged by `/health` alone — `_wait_ready.hurl` probes a
-real route (`/routes`) and the runner retries it for up to ~4 min to cover a
-cold seed. With an already-seeded `./data/mta.db` it's ready immediately.
+On startup with an empty DB the server seeds all feeds in the background. Until
+that finishes, every data route returns `503 SEEDING`, and `/health` — exempt
+from that gate so it stays reachable — returns `503 {status:"seeding"}` too,
+flipping to `200 {status:"ok"}` only once seeding completes. So `/health` is the
+readiness signal: `_wait_ready.hurl` probes it and the runner retries for up to
+~4 min to cover a cold seed. With an already-seeded `./data/mta.db` it's ready
+immediately.
 
 ## Suites (tiers by determinism)
 
