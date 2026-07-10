@@ -2,14 +2,16 @@ import type { MiddlewareHandler } from 'hono';
 import { config } from '../config';
 
 // Per-instance, fixed-window throttle. NOTE: this is deliberately NOT a global
-// quota. fly.toml runs min_machines_running >= 2, each machine holds its own
-// `store`, and the LB spreads a client's requests across machines — so the
-// effective ceiling a client hits is (machines * rateLimitMax), and the
-// X-RateLimit-Remaining a client sees varies by which machine served it. The
-// goal here is to protect each instance from overload/abuse, not to enforce a
-// cluster-wide cap. Upstream MTA feeds are already shielded by the RT cache
-// (20s TTL + promise dedup), so a true global quota would need shared state
-// (e.g. Redis) that this project intentionally avoids.
+// quota. fly.toml no longer pins a minimum machine count (auto_stop_machines
+// can scale to zero), but whenever more than one machine is running, each
+// holds its own `store`, and the LB spreads a client's requests across
+// machines — so the effective ceiling a client hits is (machines *
+// rateLimitMax), and the X-RateLimit-Remaining a client sees varies by which
+// machine served it. The goal here is to protect each instance from
+// overload/abuse, not to enforce a cluster-wide cap. Upstream MTA feeds are
+// already shielded by the RT cache (20s TTL + promise dedup), so a true
+// global quota would need shared state (e.g. Redis) that this project
+// intentionally avoids.
 const WINDOW_MS = config.rateLimitWindowMs;
 const MAX_REQUESTS = config.rateLimitMax;
 

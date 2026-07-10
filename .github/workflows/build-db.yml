@@ -65,7 +65,6 @@ jobs:
 
       - name: Roll the Fly app
         # Restart machines so they download the freshly published DB on boot.
-        # Rolling across min_machines_running=2 keeps the API serving throughout.
         uses: superfly/flyctl-actions/setup-flyctl@master
       - run: flyctl apps restart "$FLY_APP"
         env:
