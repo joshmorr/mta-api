@@ -28,10 +28,6 @@ primary_region = 'ewr'
   force_https = true
   auto_stop_machines = 'stop'
   auto_start_machines = true
-  # Run 2+ machines for resilience: a host failure or a rolling deploy leaves at
-  # least one instance serving. Each machine owns its own volume/DB, so they are
-  # independent read replicas — no shared state to coordinate.
-  min_machines_running = 2
 
   # /health is a readiness probe: the LB won't route to a not-ready machine.
   # Boot downloads a prebuilt DB (see DB_URL) rather than building it in-process,
