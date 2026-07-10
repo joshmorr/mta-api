@@ -3,7 +3,7 @@
 Black-box tests that hit the **real running server** over HTTP, complementing
 the in-process `bun:test` suite (which uses `app.request()` against `:memory:`).
 They cover the boundary bun:test can't: the live socket, the inline middleware
-in `src/index.ts` (seeding gate, `onError`, `notFound`), and response headers.
+in `src/index.ts` (`onError`, `notFound`), and response headers.
 
 Hurl is a separate binary — install it first:
 <https://hurl.dev/docs/installation.html> (e.g. `brew install hurl`,
@@ -24,8 +24,11 @@ sh scripts/hurl.sh hurl/contract.hurl                 # one suite
 DB_PATH=:memory: sh scripts/hurl.sh hurl/contract.hurl hurl/stops.hurl
 ```
 
-The runner (`scripts/hurl.sh`) boots the server, waits for the seeding gate to
-lift (see below), runs the suites in `--test` mode, then tears the server down.
+The runner (`scripts/hurl.sh`) boots the server, waits for readiness, runs the
+suites in `--test` mode, then tears the server down. The server no longer
+auto-seeds on boot, so `DB_PATH` must point at an already-seeded DB (run
+`bun run seed` once, or use the default `./data/mta.db` if you've seeded it
+before) — an empty DB makes the server exit immediately.
 
 ### Against a deployed instance
 
@@ -37,16 +40,6 @@ booting one locally. The runner skips the local boot (and ignores `DB_PATH` /
 BASE_URL=https://mta-api-restless-pond-4321.fly.dev \
   sh scripts/hurl.sh hurl/contract.hurl hurl/stops.hurl hurl/realtime.hurl
 ```
-
-## The seeding gate matters
-
-On startup with an empty DB the server seeds all feeds in the background. Until
-that finishes, every data route returns `503 SEEDING`, and `/health` — exempt
-from that gate so it stays reachable — returns `503 {status:"seeding"}` too,
-flipping to `200 {status:"ok"}` only once seeding completes. So `/health` is the
-readiness signal: `_wait_ready.hurl` probes it and the runner retries for up to
-~4 min to cover a cold seed. With an already-seeded `./data/mta.db` it's ready
-immediately.
 
 ## Suites (tiers by determinism)
 

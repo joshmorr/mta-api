@@ -2,7 +2,7 @@ name: Build & publish GTFS DB
 
 # Runs the heavy GTFS static build off-box, publishes a prebuilt mta.db to the
 # Tigris bucket, then rolling-restarts the Fly app so instances pull the new DB.
-# Instances themselves are read-only (SYNC_ENABLED=false) and just download this.
+# Instances themselves are read-only and just download this.
 
 on:
   schedule:

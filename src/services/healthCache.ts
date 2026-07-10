@@ -1,7 +1,6 @@
 /**
- * Recomputes the cached /health counts in `state.health` from the DB. Called at
- * startup and after each completed sync — the only moments the underlying counts
- * can change — so the /health readiness probe reads pure in-memory state and never
+ * Recomputes the cached /health counts in `state.health` from the DB. Called once
+ * at startup so the /health readiness probe reads pure in-memory state and never
  * queries SQLite on its hot path (see state.health for why that matters).
  */
 import { getDbCounts } from '../db/queries/health';

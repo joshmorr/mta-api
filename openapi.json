@@ -92,10 +92,9 @@
           "NOT_FOUND",
           "FEED_ERROR",
           "RATE_LIMITED",
-          "SEEDING",
           "INTERNAL"
         ],
-        "description": "Stable machine-readable error code for client branching. `INVALID_PARAM`: a query/path parameter failed validation (400). `NOT_FOUND`: the requested entity or route does not exist (404). `FEED_ERROR`: an upstream realtime feed was unavailable and no cache could be served (503). `RATE_LIMITED`: too many requests (429). `SEEDING`: the service is importing initial static data and is not ready yet (503). `INTERNAL`: an unexpected server error (500).",
+        "description": "Stable machine-readable error code for client branching. `INVALID_PARAM`: a query/path parameter failed validation (400). `NOT_FOUND`: the requested entity or route does not exist (404). `FEED_ERROR`: an upstream realtime feed was unavailable and no cache could be served (503). `RATE_LIMITED`: too many requests (429). `INTERNAL`: an unexpected server error (500).",
         "example": "NOT_FOUND"
       },
       "StopDetail": {
@@ -477,14 +476,8 @@
           "status": {
             "type": "string",
             "enum": [
-              "ok",
-              "seeding"
-            ],
-            "description": "'seeding' (with HTTP 503) while the initial data load is in progress and the instance cannot serve requests yet; 'ok' otherwise."
-          },
-          "syncing": {
-            "type": "boolean",
-            "description": "True while any static feed is currently being synced in the background."
+              "ok"
+            ]
           },
           "totals": {
             "type": "object",
@@ -523,7 +516,6 @@
         },
         "required": [
           "status",
-          "syncing",
           "totals",
           "static_feeds"
         ]
@@ -540,17 +532,12 @@
           },
           "route_count": {
             "type": "number"
-          },
-          "syncing": {
-            "type": "boolean",
-            "description": "True while this feed is currently being synced in the background."
           }
         },
         "required": [
           "last_synced",
           "stop_count",
-          "route_count",
-          "syncing"
+          "route_count"
         ]
       }
     },
@@ -1122,20 +1109,10 @@
         ],
         "operationId": "getHealth",
         "summary": "API health and feed status",
-        "description": "Returns server status and per-feed static data counts and sync timestamps. Responds 503 while the initial data load is in progress (the instance cannot serve requests yet); load balancers should treat it as a readiness probe.",
+        "description": "Returns server status and per-feed static data counts and sync timestamps.",
         "responses": {
           "200": {
-            "description": "Ready to serve requests",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HealthResponse"
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "Seeding initial data; not ready",
+            "description": "Server is up",
             "content": {
               "application/json": {
                 "schema": {

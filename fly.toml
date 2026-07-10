@@ -17,9 +17,6 @@ primary_region = 'ewr'
   # publishes a prebuilt mta.db to this Tigris bucket. On boot, start.sh downloads
   # it (see scripts/fetch-db.ts); instances never sync the feeds themselves.
   DB_URL = 'https://mta-api-db.fly.storage.tigris.dev'
-  # Read-only: startup.ts skips all in-instance sync (no seed, no interval timers,
-  # no Worker). The self-sync path stays for local dev (`bun run seed`).
-  SYNC_ENABLED = 'false'
 
 [[mounts]]
   source = 'mta_data'

@@ -5,10 +5,10 @@
 #   scripts/hurl.sh [hurl-file ...]
 #
 # Defaults to the Tier-1 contract suite against the dev DB (./data/mta.db).
-# That DB is reused if already seeded (fast); if empty it auto-seeds once on
-# startup (~2-3 min) and the readiness probe waits it out. Use :memory: for a
-# clean seed every run, or point DB_PATH at any pre-seeded fixture:
-#   DB_PATH=:memory: scripts/hurl.sh hurl/contract.hurl hurl/stops.hurl
+# The server no longer auto-seeds — that DB must already be seeded (run
+# `bun run seed` once) or the server exits immediately on an empty DB. Point
+# DB_PATH at any pre-seeded fixture:
+#   DB_PATH=/path/to/seeded.db scripts/hurl.sh hurl/contract.hurl hurl/stops.hurl
 #
 # Set BASE_URL to run the suites against an already-running server (e.g. a
 # deploy) instead of booting one locally. DB_PATH/PORT are ignored in that mode:
@@ -44,10 +44,8 @@ else
   trap 'kill "$SERVER_PID" 2>/dev/null || true' EXIT INT TERM
 fi
 
-# Generous window: a cold seed downloads + imports all feeds (~2-3 min). When
-# the DB is already seeded (or the target is a live deploy) this returns on the
-# first try. $HURL_VARS is unquoted on purpose so it splits into its two args.
-echo "[hurl] waiting for readiness (seeding gate must lift)"
+# $HURL_VARS is unquoted on purpose so it splits into its two args.
+echo "[hurl] waiting for readiness"
 hurl --retry 240 --retry-interval 1000 \
   $HURL_VARS \
   "$ROOT/hurl/_wait_ready.hurl" >/dev/null

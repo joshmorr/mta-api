@@ -10,7 +10,6 @@ export const ErrorCodeSchema = z.enum([
   'NOT_FOUND',
   'FEED_ERROR',
   'RATE_LIMITED',
-  'SEEDING',
   'INTERNAL',
 ]).openapi('ErrorCode', {
   description:
@@ -19,7 +18,6 @@ export const ErrorCodeSchema = z.enum([
     '`NOT_FOUND`: the requested entity or route does not exist (404). ' +
     '`FEED_ERROR`: an upstream realtime feed was unavailable and no cache could be served (503). ' +
     '`RATE_LIMITED`: too many requests (429). ' +
-    '`SEEDING`: the service is importing initial static data and is not ready yet (503). ' +
     '`INTERNAL`: an unexpected server error (500).',
   example: 'NOT_FOUND',
 });
@@ -160,12 +158,10 @@ export const FeedHealthSchema = z.object({
   last_synced: z.number().nullable(),
   stop_count: z.number(),
   route_count: z.number(),
-  syncing: z.boolean().openapi({ description: 'True while this feed is currently being synced in the background.' }),
 }).openapi('FeedHealth');
 
 export const HealthResponseSchema = z.object({
-  status: z.enum(['ok', 'seeding']).openapi({ description: "'seeding' (with HTTP 503) while the initial data load is in progress and the instance cannot serve requests yet; 'ok' otherwise." }),
-  syncing: z.boolean().openapi({ description: 'True while any static feed is currently being synced in the background.' }),
+  status: z.literal('ok'),
   totals: z.object({
     stop_count: z.number(),
     route_count: z.number(),

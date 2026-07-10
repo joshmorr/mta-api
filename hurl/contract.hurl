@@ -1,8 +1,7 @@
 # Tier 1 — contract tests. Deterministic regardless of WHICH data is seeded:
 # validation errors, 404s, the consistent { error, code } envelope, and
-# middleware-added headers. Note these still require a fully-seeded server —
-# the seeding gate (src/index.ts) returns 503 for every non-/health route
-# until the initial seed finishes, so the runner waits for readiness first.
+# middleware-added headers. Requires a server backed by a pre-seeded DB (the
+# runner waits for readiness first).
 
 # --- /health is always available and rate-limit exempt -----------------------
 GET {{base}}/health

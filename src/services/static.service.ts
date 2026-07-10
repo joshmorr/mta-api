@@ -129,9 +129,3 @@ export function getLastSynced(feedId: string) {
 export function isDbEmpty(): boolean {
   return isDbEmptyQuery();
 }
-
-export function isFeedStale(feedId: string, maxAgeMs: number): boolean {
-  const last = getFeedMeta(feedId);
-  if (!last) return true;
-  return Date.now() / 1000 - last > maxAgeMs / 1000;
-}
