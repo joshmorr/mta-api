@@ -61,6 +61,10 @@ describe('rateLimit middleware', () => {
     expect(overflow.status).toBe(429);
     const body = (await overflow.json()) as { code: string };
     expect(body.code).toBe('RATE_LIMITED');
+    // 429 carries Retry-After (delta seconds) for client backoff.
+    const retryAfter = Number(overflow.headers.get('Retry-After'));
+    expect(retryAfter).toBeGreaterThan(0);
+    expect(retryAfter).toBeLessThanOrEqual(60);
   });
 
   it('uses the first entry when x-forwarded-for is comma-separated', async () => {

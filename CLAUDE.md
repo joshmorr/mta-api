@@ -38,6 +38,8 @@ Copy `.env.example` to `.env`. All have defaults so the server starts without on
 | `RT_CACHE_TTL_MS` | `20000` | RT feed cache TTL |
 | `RT_FETCH_TIMEOUT_MS` | `10000` | Upstream RT fetch timeout (abort) |
 | `STATIC_FETCH_TIMEOUT_MS` | `60000` | Upstream static GTFS zip fetch timeout (abort); used by `bun run seed` and CI |
+| `RATE_LIMIT_MAX` | `100` | Requests per window per client IP (per-instance) |
+| `RATE_LIMIT_WINDOW_MS` | `60000` | Rate-limit fixed-window length |
 
 ## Architecture
 
