@@ -37,16 +37,13 @@ Copy `.env.example` to `.env`. All have defaults so the server starts without on
 | `DB_PATH` | `./data/mta.db` | Use `:memory:` for ephemeral dev |
 | `RT_CACHE_TTL_MS` | `20000` | RT feed cache TTL |
 | `RT_FETCH_TIMEOUT_MS` | `10000` | Upstream RT fetch timeout (abort) |
-| `STATIC_FETCH_TIMEOUT_MS` | `60000` | Upstream static GTFS zip fetch timeout (abort) |
-| `SUBWAY_SYNC_INTERVAL_MS` | `3600000` | 1 hour |
-| `RAIL_SYNC_INTERVAL_MS` | `86400000` | 24 hours |
-| `SYNC_ENABLED` | `true` | Set `false` to make an instance read-only (no static sync) |
+| `STATIC_FETCH_TIMEOUT_MS` | `60000` | Upstream static GTFS zip fetch timeout (abort); used by `bun run seed` and CI |
 
 ## Architecture
 
 ### Two data layers
 
-1. **Static GTFS** — SQLite (`bun:sqlite`). Stops, routes, trips, stop_times, calendar tables. Populated by downloading ZIP files from MTA S3, unzipping with `fflate`, parsing CSV with `papaparse`, and bulk-inserting. The download→unzip→parse→insert is entirely synchronous (and heavy — subway `stop_times` is ~2.4M rows), so it runs on a **Worker thread** (`src/services/syncWorker.ts`, dispatched from the main thread via `src/services/syncManager.ts`) to keep it off the HTTP event loop. The worker opens its own `bun:sqlite` connection; WAL mode lets it write while the main thread reads. `startup.ts` calls `requestSync(feed)` instead of the sync functions directly (those stay in `static.service.ts`, still used in-thread by `scripts/seed.ts` and tests). Auto-refreshes on intervals (subway hourly, rail daily). All tables are keyed by `(feed_id, ...)` because the MTA reuses IDs across feeds.
+1. **Static GTFS** — SQLite (`bun:sqlite`). Stops, routes, trips, stop_times, calendar tables. The server itself never writes to this DB — it only reads a prebuilt one: CI (`.github/workflows/build-db.yml`) runs the build (download ZIPs from MTA S3, unzip with `fflate`, parse CSV with `papaparse`, bulk-insert) and publishes the resulting `mta.db` to a bucket; each instance downloads it on boot (`start.sh` → `scripts/fetch-db.ts`). Locally, `bun run seed` runs the same build logic (still in `static.service.ts`) directly against your dev DB. All tables are keyed by `(feed_id, ...)` because the MTA reuses IDs across feeds.
 
 2. **Realtime GTFS-RT** — In-memory cache (`src/cache/rtCache.ts`). Binary protobuf decoded via `protobufjs` from `src/proto/gtfs-realtime.proto`. Fetched on demand with a 20s TTL. Promise deduplication prevents parallel upstream fetches for the same feed path. Stale cache is served with `stale: true` when upstream fails.
 

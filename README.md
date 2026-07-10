@@ -15,7 +15,7 @@ bun run seed    # download and import all static GTFS feeds into SQLite (~2–3 
 bun run dev     # start with hot reload
 ```
 
-On first `bun run dev` or `bun run start`, if the database is empty the server will automatically seed before it starts accepting requests.
+`bun run dev` / `bun run start` require a seeded database — run `bun run seed` first. If the database is empty, the server exits immediately with an error.
 
 ```
 http://localhost:3000
@@ -34,10 +34,7 @@ All options are environment variables. Defaults work out of the box.
 | `DB_PATH` | `./data/mta.db` | SQLite database path |
 | `RT_CACHE_TTL_MS` | `20000` | Realtime feed cache TTL in milliseconds |
 | `RT_FETCH_TIMEOUT_MS` | `10000` | Upstream realtime fetch timeout in milliseconds |
-| `STATIC_FETCH_TIMEOUT_MS` | `60000` | Upstream static GTFS ZIP fetch timeout in milliseconds |
-| `SUBWAY_SYNC_INTERVAL_MS` | `3600000` | Subway static feed refresh interval (1 hour). Only used when `SYNC_ENABLED=true` |
-| `RAIL_SYNC_INTERVAL_MS` | `86400000` | LIRR/MNR static feed refresh interval (24 hours). Only used when `SYNC_ENABLED=true` |
-| `SYNC_ENABLED` | `true` | When `true`, the instance syncs the feeds itself (local dev / auto-seed). Set `false` in production, where the DB is prebuilt in CI and downloaded on boot |
+| `STATIC_FETCH_TIMEOUT_MS` | `60000` | Upstream static GTFS ZIP fetch timeout in milliseconds (used by `bun run seed` and CI) |
 | `DB_URL` | _(unset)_ | Bucket base URL to download a prebuilt `mta.db` from on boot (see Deployment). When unset, no download happens |
 | `DB_FETCH_TIMEOUT_MS` | `120000` | Timeout for the boot-time DB download |
 | `LOG_LEVEL` | `info` | Log verbosity: `debug`, `info`, `warn`, `error` |
@@ -59,9 +56,9 @@ are **read-only**: they don't build the DB themselves. Instead:
    version already matches) before the server starts.
 
 This keeps the machines small and their boots fast, and confines the expensive
-2.4M-row import to CI. Instances set `SYNC_ENABLED=false` and `DB_URL=<bucket>`.
-The in-instance sync path still exists for local dev (`bun run seed` /
-`SYNC_ENABLED=true`).
+2.4M-row import to CI. Instances just set `DB_URL=<bucket>` and are otherwise
+read-only — there's no in-instance sync path. Local dev builds the same DB by
+running `bun run seed` directly.
 
 One-time setup: `fly storage create` (Tigris bucket, public-read), mirror the
 `AWS_*` credentials into GitHub Secrets, and add a `FLY_API_TOKEN` secret plus
@@ -85,7 +82,6 @@ All responses are `application/json`. Errors follow a consistent shape:
 | `NOT_FOUND` | 404 | The requested entity or route does not exist |
 | `FEED_ERROR` | 503 | Upstream realtime feed unavailable and no cache to serve |
 | `RATE_LIMITED` | 429 | Too many requests |
-| `SEEDING` | 503 | Service is importing initial static data and is not ready yet |
 | `INTERNAL` | 500 | Unexpected server error |
 
 ### OpenAPI spec
@@ -336,17 +332,16 @@ Each `informed_entity` entry is an independent selector — fields within one en
 
 ### `GET /health`
 
-API status and per-feed static data counts. `syncing` (top-level, and per feed) is `true` while a static feed is being refreshed in the background; `/health` always responds immediately because the sync runs on a separate worker thread.
+API status and per-feed static data counts, read from an in-memory cache refreshed once at startup — `/health` never queries SQLite, so it always responds immediately.
 
 ```json
 {
   "status": "ok",
-  "syncing": false,
   "totals": { "stop_count": 1729, "route_count": 48 },
   "static_feeds": {
-    "subway": { "last_synced": 1773602000, "stop_count": 1488, "route_count": 29, "syncing": false },
-    "lirr":   { "last_synced": 1773602000, "stop_count": 127,  "route_count": 13, "syncing": false },
-    "mnr":    { "last_synced": 1773602000, "stop_count": 114,  "route_count": 6,  "syncing": false }
+    "subway": { "last_synced": 1773602000, "stop_count": 1488, "route_count": 29 },
+    "lirr":   { "last_synced": 1773602000, "stop_count": 127,  "route_count": 13 },
+    "mnr":    { "last_synced": 1773602000, "stop_count": 114,  "route_count": 6  }
   }
 }
 ```
@@ -365,7 +360,7 @@ API status and per-feed static data counts. `syncing` (top-level, and per feed) 
 
 The supplemented subway feed includes service changes for the next 7 days and is preferred over the base feed.
 
-These feeds are the origin of all schedule data, but the running API doesn't fetch them directly. In production a scheduled CI job builds the SQLite DB from them daily and instances download the result (see [Deployment](#deployment)). When an instance syncs the feeds itself instead (`SYNC_ENABLED=true`, the default for local dev), it refreshes subway hourly and rail daily.
+These feeds are the origin of all schedule data, but the running API doesn't fetch them directly. In production a scheduled CI job builds the SQLite DB from them daily and instances download the result (see [Deployment](#deployment)). For local dev, `bun run seed` builds the same DB directly from these feeds.
 
 ### Realtime GTFS-RT (in-memory, 20s TTL)
 
