@@ -10,8 +10,8 @@
     "lint:fix": "oxlint --fix src/ scripts/",
     "test": "bun test",
     "test:coverage": "bun test --coverage",
-    "test:hurl": "sh scripts/hurl.sh hurl/contract.hurl hurl/stops.hurl",
-    "test:hurl:all": "sh scripts/hurl.sh hurl/contract.hurl hurl/stops.hurl hurl/realtime.hurl"
+    "test:hurl": "sh scripts/hurl.sh test/e2e/contract.hurl test/e2e/stops.hurl",
+    "test:hurl:all": "sh scripts/hurl.sh test/e2e/contract.hurl test/e2e/stops.hurl test/e2e/realtime.hurl"
   },
   "dependencies": {
     "@hono/swagger-ui": "^0.6.1",

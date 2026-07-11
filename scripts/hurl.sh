@@ -8,22 +8,22 @@
 # The server no longer auto-seeds — that DB must already be seeded (run
 # `bun run seed` once) or the server exits immediately on an empty DB. Point
 # DB_PATH at any pre-seeded fixture:
-#   DB_PATH=/path/to/seeded.db scripts/hurl.sh hurl/contract.hurl hurl/stops.hurl
+#   DB_PATH=/path/to/seeded.db scripts/hurl.sh test/e2e/contract.hurl test/e2e/stops.hurl
 #
 # Set BASE_URL to run the suites against an already-running server (e.g. a
 # deploy) instead of booting one locally. DB_PATH/PORT are ignored in that mode:
-#   BASE_URL=https://my-deploy.example scripts/hurl.sh hurl/contract.hurl
+#   BASE_URL=https://my-deploy.example scripts/hurl.sh test/e2e/contract.hurl
 set -eu
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-ENV_FILE="$ROOT/hurl/local.env"
+ENV_FILE="$ROOT/test/e2e/local.env"
 PORT="${PORT:-3000}"
 DB_PATH="${DB_PATH:-./data/mta.db}"
 BASE_URL="${BASE_URL:-}"
 
 # Default suite if none passed.
 if [ "$#" -eq 0 ]; then
-  set -- "$ROOT/hurl/contract.hurl"
+  set -- "$ROOT/test/e2e/contract.hurl"
 fi
 
 if ! command -v hurl >/dev/null 2>&1; then
@@ -48,7 +48,7 @@ fi
 echo "[hurl] waiting for readiness"
 hurl --retry 240 --retry-interval 1000 \
   $HURL_VARS \
-  "$ROOT/hurl/_wait_ready.hurl" >/dev/null
+  "$ROOT/test/e2e/_wait_ready.hurl" >/dev/null
 
 echo "[hurl] running suites: $*"
 hurl --test $HURL_VARS "$@"

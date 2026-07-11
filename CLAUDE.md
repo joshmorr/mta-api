@@ -17,14 +17,14 @@ bun run lint         # oxlint
 bun run lint:fix     # oxlint --fix
 bun test             # run all tests (bun:test)
 bun run test:coverage # run tests with coverage
-bun test src/test/utils/csv.test.ts   # run a single test file
+bun test test/utils/csv.test.ts   # run a single test file
 bun run test:hurl    # black-box HTTP tests (boots a real server; needs `hurl`)
 bun run test:hurl:all # ^ plus realtime smoke (hits live MTA feeds)
 ```
 
 Type-check: `bunx tsc --noEmit` (no build script wired up for this).
 
-`hurl` is a separate binary (not a package dep) — install from <https://hurl.dev>. The `hurl/` suites test the real HTTP surface (status codes, `{error,code}` envelope, headers) that in-process `bun:test` can't reach; see `hurl/README.md`.
+`hurl` is a separate binary (not a package dep) — install from <https://hurl.dev>. The `test/e2e/` suites test the real HTTP surface (status codes, `{error,code}` envelope, headers) that in-process `bun:test` can't reach; see `test/e2e/README.md`.
 
 ### Environment variables
 
@@ -62,8 +62,8 @@ Subway routes map to specific RT feed paths (e.g. A/C/E → `nyct/gtfs-ace`). Th
 - Routes use `OpenAPIHono` + `createRoute()` with Zod schemas in `src/schemas/api.ts`. Response types in `src/types/api.ts` are the original TypeScript interfaces (still used by services). Status codes in handlers must use `as const` (e.g. `c.json(data, 200 as const)`) for type narrowing.
 - OpenAPI spec served at `GET /doc`, Swagger UI at `GET /ui`. The doc metadata lives in `src/openapi.ts` (`openApiDocConfig`), shared by `index.ts` and the static dump. `bun run openapi:dump` writes the committed `openapi.json` (the codegen artifact) via `buildOpenApiDocument()`, which mounts the routers without booting the server and normalizes Hono `:param` path keys to OpenAPI `{param}`. Regenerate it after any route or schema change.
 - Subway stops have a parent/platform hierarchy (parent station → N/S platforms). LIRR and MNR use a flat stop model.
-- Tests use `bun:test` and live in `src/test/`, mirroring the source structure. `bunfig.toml` preloads `src/test/setup.ts` before every test run — it sets `DB_PATH=:memory:` and runs migrations so tests never touch the real DB.
-- Test helpers: `src/test/helpers/seed.ts` exports `resetDb()`, `seedSubway()`, `seedLirr()`, `seedMnr()` for fixture setup. `src/test/helpers/app.ts` exports `makeTestApp(router, mountPath)` to mount a single router for isolated route tests.
+- Tests use `bun:test` and live in `test/`, mirroring the source structure. `bunfig.toml` preloads `test/setup.ts` before every test run — it sets `DB_PATH=:memory:` and runs migrations so tests never touch the real DB.
+- Test helpers: `test/helpers/seed.ts` exports `resetDb()`, `seedSubway()`, `seedLirr()`, `seedMnr()` for fixture setup. `test/helpers/app.ts` exports `makeTestApp(router, mountPath)` to mount a single router for isolated route tests.
 - The `data/` directory (SQLite DB) is gitignored and created automatically on first run.
 
 ### Adding schema changes
