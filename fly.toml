@@ -16,7 +16,10 @@ primary_region = 'ewr'
   # The heavy GTFS build runs once in CI (.github/workflows/build-db.yml), which
   # publishes a prebuilt mta.db to this Tigris bucket. On boot, start.sh downloads
   # it (see scripts/fetch-db.ts); instances never sync the feeds themselves.
-  DB_URL = 'https://lingering-frost-3143.fly.storage.tigris.dev'
+  # Anonymous reads must use the public content domain (t3.tigrisbucket.io);
+  # the fly.storage.tigris.dev S3-API endpoint requires SigV4 and 403s the
+  # unsigned fetch in scripts/fetch-db.ts even when objects are public-read.
+  DB_URL = 'https://lingering-frost-3143.t3.tigrisbucket.io'
 
 [[mounts]]
   source = 'mta_data'
