@@ -58,10 +58,12 @@ jobs:
       - name: Publish to Tigris
         # Upload the big blob + checksum first; publish the version marker LAST so
         # a booting instance never sees a new version before its gz is complete.
+        # --acl public-read: instances fetch these over unsigned HTTP (fetch-db.ts),
+        # so the objects must be anonymously readable even on a public-enabled bucket.
         run: |
-          aws s3 cp ./build/mta.db.gz     "s3://${BUCKET}/mta.db.gz"     --endpoint-url "$AWS_ENDPOINT_URL_S3"
-          aws s3 cp ./build/mta.db.sha256 "s3://${BUCKET}/mta.db.sha256" --endpoint-url "$AWS_ENDPOINT_URL_S3"
-          aws s3 cp ./build/mta.db.version "s3://${BUCKET}/mta.db.version" --endpoint-url "$AWS_ENDPOINT_URL_S3"
+          aws s3 cp ./build/mta.db.gz     "s3://${BUCKET}/mta.db.gz"     --acl public-read --endpoint-url "$AWS_ENDPOINT_URL_S3"
+          aws s3 cp ./build/mta.db.sha256 "s3://${BUCKET}/mta.db.sha256" --acl public-read --endpoint-url "$AWS_ENDPOINT_URL_S3"
+          aws s3 cp ./build/mta.db.version "s3://${BUCKET}/mta.db.version" --acl public-read --endpoint-url "$AWS_ENDPOINT_URL_S3"
 
       - name: Roll the Fly app
         # Restart machines so they download the freshly published DB on boot.
