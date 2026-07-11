@@ -15,19 +15,9 @@ import { join } from 'path';
 import { buildOpenApiDocument } from '../src/openapi';
 
 const outPath = join(import.meta.dir, '..', 'openapi.json');
+// buildOpenApiDocument() already normalizes Hono `:param` keys to `{param}`,
+// matching what the live `/doc` endpoint serves.
 const doc = buildOpenApiDocument();
-
-// The routes are registered with Hono's `:param` path syntax, which zod-openapi
-// carries verbatim into the emitted path keys (e.g. `/stops/:stop_id`). Standard
-// OpenAPI — and the codegen tools that consume this file — expect `{param}`.
-// Normalize the path templates here so the committed artifact is spec-compliant
-// without changing the runtime routes (path parameters are already declared
-// correctly under `parameters`).
-const normalizedPaths: Record<string, unknown> = {};
-for (const [path, item] of Object.entries(doc.paths ?? {})) {
-  normalizedPaths[path.replace(/:([^/]+)/g, '{$1}')] = item;
-}
-doc.paths = normalizedPaths as typeof doc.paths;
 
 writeFileSync(outPath, JSON.stringify(doc, null, 2) + '\n');
 

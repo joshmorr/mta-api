@@ -7,7 +7,7 @@ import { startup } from './startup';
 import { stopsRouter, routesRouter, arrivalsRouter, vehiclesRouter, alertsRouter, healthRouter } from './routes';
 import { rateLimit } from './middleware/rateLimit';
 import { cacheHeaders } from './middleware/cacheHeaders';
-import { openApiDocConfig } from './openapi';
+import { openApiDocConfig, normalizeOpenApiPaths } from './openapi';
 
 const app = new OpenAPIHono();
 
@@ -30,7 +30,10 @@ app.route('/vehicles', vehiclesRouter);
 app.route('/alerts', alertsRouter);
 app.route('/health', healthRouter);
 
-app.doc('/doc', openApiDocConfig);
+// Serve the spec with Hono `:param` path keys normalized to OpenAPI `{param}`,
+// so the live endpoint matches the committed `openapi.json` and codegen tools
+// (openapi-typescript, orval, …) that consume `/doc` get spec-compliant paths.
+app.get('/doc', (c) => c.json(normalizeOpenApiPaths(app.getOpenAPIDocument(openApiDocConfig))));
 
 app.get('/ui', swaggerUI({ url: '/doc' }));
 
