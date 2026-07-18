@@ -13,12 +13,6 @@ primary_region = 'ewr'
   DB_PATH = '/data/mta.db'
   HOST = '0.0.0.0'
   PORT = '3000'
-  # The heavy GTFS build runs once in CI (.github/workflows/build-db.yml), which
-  # publishes a prebuilt mta.db to this Tigris bucket. On boot, start.sh downloads
-  # it (see scripts/fetch-db.ts); instances never sync the feeds themselves.
-  # Anonymous reads must use the public content domain (t3.tigrisbucket.io);
-  # the fly.storage.tigris.dev S3-API endpoint requires SigV4 and 403s the
-  # unsigned fetch in scripts/fetch-db.ts even when objects are public-read.
   DB_URL = 'https://lingering-frost-3143.t3.tigrisbucket.io'
 
 [[mounts]]
@@ -32,15 +26,6 @@ primary_region = 'ewr'
   auto_stop_machines = 'stop'
   auto_start_machines = true
 
-  # /health is a readiness probe: the LB won't route to a not-ready machine.
-  # Boot downloads a prebuilt DB (see DB_URL) rather than building it in-process,
-  # so a fresh machine is ready in seconds and comfortably inside the 60s grace —
-  # unlike the old in-instance seed (~2-3 min), which had to be provisioned out of
-  # the deploy path. On an empty/unreachable volume start.sh fetches the DB before
-  # the server binds; if it can't and there's no local copy, the machine exits and
-  # stays out of rotation. /health reads only in-memory state (no SQLite), so it
-  # responds in well under a second; the 10s timeout is headroom for GC/cold
-  # pauses, not query latency.
   [[http_service.checks]]
     interval     = '15s'
     timeout      = '10s'
@@ -48,11 +33,6 @@ primary_region = 'ewr'
     method       = 'get'
     path         = '/health'
 
-# The heavy static sync (2.4M-row subway import, ~1.33GB RSS peak) no longer runs
-# on the box — it happens in CI, and instances just download the result. So the
-# spare core and extra RAM that sizing existed for are gone: a read-only instance
-# is SQLite page cache + Bun runtime, and the boot download is streamed/gunzipped
-# chunk-by-chunk (bounded memory). shared-cpu-1x / 512MB is plenty.
 [[vm]]
   size = 'shared-cpu-1x'
   memory = '512mb'
