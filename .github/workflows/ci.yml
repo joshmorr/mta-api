@@ -1,0 +1,41 @@
+name: CI
+
+# Fast, hermetic checks on every push/PR: typecheck, lint, tests, and an OpenAPI
+# drift guard. No DB download, no live MTA feeds, no secrets — the test suite runs
+# in-memory (test/setup.ts sets DB_PATH=:memory:) and the spec is generated purely
+# from source. The heavy GTFS DB build lives separately in build-db.yml.
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Typecheck
+        run: bunx tsc --noEmit
+
+      - name: Lint
+        run: bun run lint
+
+      - name: Test
+        run: bun test
+
+      # Regenerate openapi.json from the current routes and fail if it differs from
+      # the committed copy — i.e. a route/schema changed without `bun run openapi:dump`.
+      # Runs last so a spec mismatch doesn't mask real code failures. Fix locally with
+      # `bun run openapi:dump` and commit the updated spec.
+      - name: OpenAPI drift check
+        run: |
+          bun run openapi:dump
+          git diff --exit-code openapi.json

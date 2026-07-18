@@ -26,6 +26,7 @@
     "@types/papaparse": "^5.5.2",
     "@types/swagger-ui-dist": "^3.30.6",
     "oxlint": "^1.69.0",
-    "swagger-ui-dist": "^5.32.6"
+    "swagger-ui-dist": "^5.32.6",
+    "typescript": "5.9.3"
   }
 }
