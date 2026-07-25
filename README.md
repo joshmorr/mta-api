@@ -395,11 +395,4 @@ Fetched on demand, cached per feed path, with promise deduplication to prevent c
 
 ---
 
-## Data attribution and terms
-
-Transit data is obtained from the Metropolitan Transportation Authority and
-redistributed from this server, in accordance with the
-[MTA data feed terms and conditions](https://www.mta.info/developers/terms-and-conditions).
-
-This project is **not affiliated with, endorsed by, or licensed by the MTA**. Data
-is provided as-is, with no guarantee of accuracy, completeness, or timeliness.
+This project is not affiliated with, endorsed by, or licensed by the MTA.
