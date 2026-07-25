@@ -7,6 +7,17 @@ A REST API over the MTA's GTFS static and realtime feeds. Handles protobuf parsi
 
 ---
 
+## Supported feeds
+
+| Feed | Static schedule | Realtime |
+|------|:---:|:---:|
+| Subway | ✅ | ✅ |
+| LIRR | ✅ | ✅ |
+| Metro-North | ✅ | ✅ |
+| Buses | Coming soon | Coming soon |
+
+---
+
 ## Quick start
 
 ```sh
