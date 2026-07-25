@@ -11,10 +11,10 @@ A REST API over the MTA's GTFS static and realtime feeds. Handles protobuf parsi
 
 | Feed | Static schedule | Realtime |
 |------|:---:|:---:|
-| Subway | ✅ | ✅ |
-| LIRR | ✅ | ✅ |
-| Metro-North | ✅ | ✅ |
-| Buses | Coming soon | Coming soon |
+| 🚊 Subway | ✅ | ✅ |
+| 🚆 LIRR | ✅ | ✅ |
+| 🚆 Metro-North | ✅ | ✅ |
+| 🚌 Bus | Coming soon | Coming soon |
 
 ---
 
