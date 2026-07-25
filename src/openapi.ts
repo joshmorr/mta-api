@@ -21,7 +21,7 @@ export const openApiDocConfig = {
     title: 'MTA API',
     version: '1.0.0',
     description:
-      'REST API for NYC MTA transit data — subway, LIRR, and Metro-North routes, stops, arrivals, vehicles, and service alerts.',
+      'REST API for NYC MTA transit data — subway, LIRR, and Metro-North routes, stops, arrivals, vehicles, and service alerts.\n\nThis project is not affiliated with, endorsed by, or licensed by the MTA.',
   },
   servers: [{ url: `http://${config.host}:${config.port}`, description: 'Local' }],
 };
