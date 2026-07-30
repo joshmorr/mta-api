@@ -1,7 +1,7 @@
 import * as protobuf from 'protobufjs';
 import { join } from 'path';
 import type { FeedMessage } from '../types/gtfs';
-import { MTA_RT_BASE } from '../services/feed.service';
+import { MTA_RT_BASE, getRtCacheTtlMs } from '../services/feed.service';
 import { config } from '../config';
 
 interface CacheEntry {
@@ -49,7 +49,7 @@ export function __resetRtCacheForTests(): void {
 export async function getFeed(feedPath: string): Promise<{ feedMessage: FeedMessage; stale: boolean; feed_error?: string }> {
   const cached = cache.get(feedPath);
 
-  if (cached && Date.now() - cached.fetchedAt < config.rtCacheTtlMs) {
+  if (cached && Date.now() - cached.fetchedAt < getRtCacheTtlMs(feedPath)) {
     return { feedMessage: cached.feedMessage, stale: false };
   }
 

@@ -1,8 +1,7 @@
 import { getFeed } from '../cache/rtCache';
+import { ALERTS_FEED_PATH } from './feed.service';
 import type { AlertResponse, InformedEntity } from '../types/api';
 import { toNumber, getEnglishText } from '../utils/realtime';
-
-const ALERTS_FEED_PATH = 'camsys/all-alerts';
 
 export async function fetchAlerts(): Promise<{
   generated_at: number;
