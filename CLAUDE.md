@@ -35,7 +35,7 @@ Copy `.env.example` to `.env`. All have defaults so the server starts without on
 | `PORT` | `3000` | |
 | `HOST` | `0.0.0.0` | |
 | `DB_PATH` | `./data/mta.db` | Use `:memory:` for ephemeral dev |
-| `RT_CACHE_TTL_MS` | `20000` | RT feed cache TTL |
+| `RT_CACHE_TTL_MS` | `10000` | RT cache TTL for the vehicle feeds; alerts use a fixed 30s (`ALERTS_RT_CACHE_TTL_MS`) |
 | `RT_FETCH_TIMEOUT_MS` | `10000` | Upstream RT fetch timeout (abort) |
 | `STATIC_FETCH_TIMEOUT_MS` | `60000` | Upstream static GTFS zip fetch timeout (abort); used by `bun run seed` and CI |
 | `RATE_LIMIT_MAX` | `100` | Requests per window per client IP (per-instance) |
@@ -47,7 +47,7 @@ Copy `.env.example` to `.env`. All have defaults so the server starts without on
 
 1. **Static GTFS** — SQLite (`bun:sqlite`). Stops, routes, trips, stop_times, calendar tables. The server itself never writes to this DB — it only reads a prebuilt one: CI (`.github/workflows/build-db.yml`) runs the build (download ZIPs from MTA S3, unzip with `fflate`, parse CSV with `papaparse`, bulk-insert) and publishes the resulting `mta.db` to a bucket; each instance downloads it on boot (`start.sh` → `scripts/fetch-db.ts`). Locally, `bun run seed` runs the same build logic (still in `static.service.ts`) directly against your dev DB. All tables are keyed by `(feed_id, ...)` because the MTA reuses IDs across feeds.
 
-2. **Realtime GTFS-RT** — In-memory cache (`src/cache/rtCache.ts`). Binary protobuf decoded via `protobufjs` from `src/proto/gtfs-realtime.proto`. Fetched on demand with a 20s TTL. Promise deduplication prevents parallel upstream fetches for the same feed path. Stale cache is served with `stale: true` when upstream fails.
+2. **Realtime GTFS-RT** — In-memory cache (`src/cache/rtCache.ts`). Binary protobuf decoded via `protobufjs` from `src/proto/gtfs-realtime.proto`. Fetched on demand with a 10s TTL (alerts 30s — see `getRtCacheTtlMs` in `src/services/feed.service.ts`). Promise deduplication prevents parallel upstream fetches for the same feed path. Stale cache is served with `stale: true` when upstream fails.
 
 ### Feed scoping
 
