@@ -1,9 +1,13 @@
 import { describe, expect, it } from 'bun:test';
 import {
+  ALERTS_FEED_PATH,
+  ALERTS_RT_CACHE_TTL_MS,
   getFeedPath,
   getFeedPathsForRoutes,
+  getRtCacheTtlMs,
   SUBWAY_ROUTE_TO_FEED,
 } from '../../src/services/feed.service';
+import { config } from '../../src/config';
 
 describe('getFeedPath', () => {
   it('returns the LIRR feed path regardless of routeId', () => {
@@ -105,5 +109,42 @@ describe('getFeedPathsForRoutes', () => {
     ];
     const result = getFeedPathsForRoutes(routes);
     expect(result).toEqual(new Set(['nyct/gtfs-nqrw', 'lirr/gtfs-lirr']));
+  });
+});
+
+describe('getRtCacheTtlMs', () => {
+  it('gives the alerts feed its own TTL', () => {
+    expect(getRtCacheTtlMs(ALERTS_FEED_PATH)).toBe(ALERTS_RT_CACHE_TTL_MS);
+  });
+
+  it('caches alerts longer than the vehicle feeds', () => {
+    // The whole point of the carve-out: alerts publish ~181s apart at ~570KB,
+    // so they must not share the vehicle-feed TTL.
+    expect(ALERTS_RT_CACHE_TTL_MS).toBeGreaterThan(config.rtCacheTtlMs);
+  });
+
+  it('keeps the alerts TTL under a minute', () => {
+    // Cache age is the only lag this API adds on top of upstream, so it stays
+    // comfortably under a minute. Raising it toward the ~180s upstream cadence
+    // would mean surfacing cache age on the response first. Guard the bound,
+    // not the number.
+    expect(ALERTS_RT_CACHE_TTL_MS).toBeLessThan(60_000);
+  });
+
+  it('uses the shared TTL for every vehicle feed path', () => {
+    const vehicleFeeds = new Set([
+      ...Object.values(SUBWAY_ROUTE_TO_FEED),
+      'lirr/gtfs-lirr',
+      'mnr/gtfs-mnr',
+    ]);
+
+    expect(vehicleFeeds.size).toBe(10);
+    for (const path of vehicleFeeds) {
+      expect(getRtCacheTtlMs(path)).toBe(config.rtCacheTtlMs);
+    }
+  });
+
+  it('falls back to the shared TTL for an unrecognized path', () => {
+    expect(getRtCacheTtlMs('nyct/gtfs-future-line')).toBe(config.rtCacheTtlMs);
   });
 });

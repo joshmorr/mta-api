@@ -9,7 +9,7 @@ import { config } from '../config';
 // rateLimitMax), and the X-RateLimit-Remaining a client sees varies by which
 // machine served it. The goal here is to protect each instance from
 // overload/abuse, not to enforce a cluster-wide cap. Upstream MTA feeds are
-// already shielded by the RT cache (20s TTL + promise dedup), so a true
+// already shielded by the RT cache (short per-feed TTL + promise dedup), so a true
 // global quota would need shared state (e.g. Redis) that this project
 // intentionally avoids.
 const WINDOW_MS = config.rateLimitWindowMs;

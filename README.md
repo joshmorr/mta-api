@@ -43,7 +43,7 @@ All options are environment variables. Defaults work out of the box.
 | `PORT` | `3000` | HTTP listen port |
 | `HOST` | `0.0.0.0` | HTTP listen host |
 | `DB_PATH` | `./data/mta.db` | SQLite database path |
-| `RT_CACHE_TTL_MS` | `20000` | Realtime feed cache TTL in milliseconds |
+| `RT_CACHE_TTL_MS` | `10000` | Realtime cache TTL in milliseconds for the vehicle feeds. Service alerts use a fixed 30s instead (see [Realtime GTFS-RT](#realtime-gtfs-rt-in-memory-10s-ttl)) |
 | `RT_FETCH_TIMEOUT_MS` | `10000` | Upstream realtime fetch timeout in milliseconds |
 | `STATIC_FETCH_TIMEOUT_MS` | `60000` | Upstream static GTFS ZIP fetch timeout in milliseconds (used by `bun run seed` and CI) |
 | `DB_URL` | _(unset)_ | Bucket base URL to download a prebuilt `mta.db` from on boot (see Deployment). When unset, no download happens |
@@ -373,9 +373,11 @@ The supplemented subway feed includes service changes for the next 7 days and is
 
 These feeds are the origin of all schedule data, but the running API doesn't fetch them directly. In production a scheduled CI job builds the SQLite DB from them daily and instances download the result (see [Deployment](#deployment)). For local dev, `bun run seed` builds the same DB directly from these feeds.
 
-### Realtime GTFS-RT (in-memory, 20s TTL)
+### Realtime GTFS-RT (in-memory, 10s TTL)
 
 Fetched on demand, cached per feed path, with promise deduplication to prevent concurrent requests from triggering parallel upstream fetches.
+
+The vehicle feeds below share one TTL (`RT_CACHE_TTL_MS`, default 10s), which sits above the publish period of eight of the ten so nearly every fetch returns new data. Service alerts are the exception: they republish on the order of minutes at ~570KB, roughly 6x the largest vehicle feed, so they use a fixed 30s TTL (`ALERTS_RT_CACHE_TTL_MS` in `src/services/feed.service.ts`).
 
 **No API key required.** Binary protobuf, decoded via `protobufjs`.
 
