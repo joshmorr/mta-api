@@ -2,7 +2,7 @@
  * One-off script to seed the database from all static GTFS feeds.
  * Run with: bun run scripts/seed.ts
  */
-import { resetStaticData, runMigrations } from '../src/db/client';
+import { analyzeDb, resetStaticData, runMigrations } from '../src/db/client';
 import { syncSubwayFeed, syncLirrFeed, syncMnrFeed } from '../src/services/static.service';
 
 async function main() {
@@ -14,6 +14,12 @@ async function main() {
   await syncSubwayFeed();
   await syncLirrFeed();
   await syncMnrFeed();
+
+  // Must run after every feed is imported — stats describe the data as it
+  // stands, and the query planner needs them to pick the right index on the
+  // arrivals path. See analyzeDb() in src/db/client.ts.
+  console.error('[seed] Analyzing (collecting query planner statistics)...');
+  analyzeDb();
 
   console.error('[seed] Done.');
   process.exit(0);

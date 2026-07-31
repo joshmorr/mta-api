@@ -75,6 +75,11 @@ CREATE TABLE IF NOT EXISTS feed_meta (
 
 export const CREATE_INDEXES = [
   `CREATE INDEX IF NOT EXISTS idx_stop_times_stop_id ON stop_times(feed_id, stop_id)`,
+  // Covering index for the arrivals hot path (getServedRouteIdsByStopIds): that
+  // query filters on (feed_id, stop_id) and then joins to trips on trip_id.
+  // Carrying trip_id in the index lets SQLite answer the whole scan from the
+  // index alone, with no row lookup into the 2.9M-row stop_times table.
+  `CREATE INDEX IF NOT EXISTS idx_stop_times_stop_trip ON stop_times(feed_id, stop_id, trip_id)`,
   `CREATE INDEX IF NOT EXISTS idx_stop_times_trip_id ON stop_times(feed_id, trip_id)`,
   `CREATE INDEX IF NOT EXISTS idx_trips_route_id     ON trips(feed_id, route_id)`,
   `CREATE INDEX IF NOT EXISTS idx_stops_name         ON stops(stop_name COLLATE NOCASE)`,

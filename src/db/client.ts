@@ -53,6 +53,28 @@ export function resetStaticData() {
   db.run('DELETE FROM feed_meta');
 }
 
+/**
+ * Collect query-planner statistics into `sqlite_stat1`.
+ *
+ * Without stats SQLite falls back on fixed guesses about how selective each
+ * column is, and it has no way to know that `stop_times.feed_id` has only three
+ * distinct values — so `feed_id = 'subway'` looks selective when it actually
+ * matches 84% of the table. That mis-estimate made the planner walk the whole
+ * feed via the primary-key autoindex on the arrivals hot path instead of
+ * seeking on (feed_id, stop_id).
+ *
+ * Deliberately *not* called from runMigrations(): stats belong to the data, not
+ * the schema. The server only ever reads a prebuilt DB, and running ANALYZE
+ * against an empty or freshly-migrated database would write stats describing no
+ * rows — worse than having none. This is a build-time step, invoked at the end
+ * of `bun run seed` once every feed is imported. `VACUUM INTO` copies
+ * `sqlite_stat1` like any other table, so the stats survive into the published
+ * artifact.
+ */
+export function analyzeDb() {
+  db.run('ANALYZE');
+}
+
 export function runMigrations() {
   const needsRebuild =
     hasColumn('stops', 'stop_id') && !hasColumn('stops', 'feed_id');
