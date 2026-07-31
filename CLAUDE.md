@@ -70,6 +70,10 @@ Subway routes map to specific RT feed paths (e.g. A/C/E → `nyct/gtfs-ace`). Th
 
 Schema DDL lives in `src/db/schema.ts` as `CREATE TABLE IF NOT EXISTS` statements. `runMigrations()` in `src/db/client.ts` runs them on startup. For breaking column changes, add detection logic to `runMigrations()` alongside the existing `hasColumn` check (see the `feed_id` migration as an example).
 
+Indexes live in the same file as `CREATE_INDEXES` and are created by `runMigrations()` too, so a new one is built on the next boot (~1.8s for a `stop_times` index; subsequent boots are free via `IF NOT EXISTS`).
+
+Query planner statistics are a *build*-time concern, not a schema one: `bun run seed` calls `analyzeDb()` after every feed is imported, and `VACUUM INTO` carries `sqlite_stat1` into the published artifact. Don't move `ANALYZE` into `runMigrations()` — the server only reads a prebuilt DB, and analyzing a freshly-migrated empty one writes stats describing no rows. Without stats SQLite falls back on fixed guesses; that's what made the arrivals path walk all 2.47M subway `stop_times` rows instead of seeking (158ms → 10.8ms once fixed). If you add an index that a hot query depends on, check `EXPLAIN QUERY PLAN` against a *seeded* DB — plans on the small test fixtures don't reflect the real ones.
+
 ## Git
 
 Commit messages always use the [Conventional Commits](https://www.conventionalcommits.org/) spec:
