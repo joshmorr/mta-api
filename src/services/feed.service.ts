@@ -39,27 +39,22 @@ export const SUBWAY_ROUTE_TO_FEED: Record<string, string> = {
 };
 
 /**
+ * Cache TTL for a feed path. Every vehicle feed shares `RT_CACHE_TTL_MS`; only
+ * alerts differs (`ALERTS_RT_CACHE_TTL_MS`), because it is the one feed whose
+ * cadence is off by an order of magnitude from the rest (~181s vs ~3-15s).
+ *
  * Alerts publish on the order of minutes (one observed gap of 181s) at ~570KB,
  * roughly 6x the largest vehicle feed. At the shared vehicle-feed TTL they are
  * refetched many times per publish for nothing.
  *
- * Held at 30s rather than the ~180s that sample implies, for two reasons: the
- * measurement rests on a single observed gap, and cache age is the only lag
- * this API adds on top of upstream, so it is kept comfortably under a minute.
- * Raising it toward the real cadence would mean surfacing cache age on the
- * response first. Re-measure before changing it.
- *
- * Not an env var: this is a ceiling, not a tuning knob.
- */
-export const ALERTS_RT_CACHE_TTL_MS = 30_000;
-
-/**
- * Cache TTL for a feed path. Every vehicle feed shares `RT_CACHE_TTL_MS`; only
- * alerts differs, because it is the one feed whose cadence is off by an order
- * of magnitude from the rest (~181s vs ~3-15s).
+ * The 30s default sits well below the ~180s that sample implies, for two
+ * reasons: the measurement rests on a single observed gap, and cache age is the
+ * only lag this API adds on top of upstream, so it is kept comfortably under a
+ * minute. Raising it toward the real cadence would mean surfacing cache age on
+ * the response first.
  */
 export function getRtCacheTtlMs(feedPath: string): number {
-  return feedPath === ALERTS_FEED_PATH ? ALERTS_RT_CACHE_TTL_MS : config.rtCacheTtlMs;
+  return feedPath === ALERTS_FEED_PATH ? config.alertsRtCacheTtlMs : config.rtCacheTtlMs;
 }
 
 export function getFeedPath(feedId: FeedId, routeId: string): string | undefined {

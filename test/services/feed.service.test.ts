@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import {
   ALERTS_FEED_PATH,
-  ALERTS_RT_CACHE_TTL_MS,
   getFeedPath,
   getFeedPathsForRoutes,
   getRtCacheTtlMs,
@@ -114,21 +113,22 @@ describe('getFeedPathsForRoutes', () => {
 
 describe('getRtCacheTtlMs', () => {
   it('gives the alerts feed its own TTL', () => {
-    expect(getRtCacheTtlMs(ALERTS_FEED_PATH)).toBe(ALERTS_RT_CACHE_TTL_MS);
+    expect(getRtCacheTtlMs(ALERTS_FEED_PATH)).toBe(config.alertsRtCacheTtlMs);
   });
 
   it('caches alerts longer than the vehicle feeds', () => {
     // The whole point of the carve-out: alerts publish ~181s apart at ~570KB,
-    // so they must not share the vehicle-feed TTL.
-    expect(ALERTS_RT_CACHE_TTL_MS).toBeGreaterThan(config.rtCacheTtlMs);
+    // so they must not share the vehicle-feed TTL. Both are env-configurable
+    // now, so this guards the shipped defaults, not a hardcoded pair.
+    expect(config.alertsRtCacheTtlMs).toBeGreaterThan(config.rtCacheTtlMs);
   });
 
   it('keeps the alerts TTL under a minute', () => {
-    // Cache age is the only lag this API adds on top of upstream, so it stays
-    // comfortably under a minute. Raising it toward the ~180s upstream cadence
-    // would mean surfacing cache age on the response first. Guard the bound,
-    // not the number.
-    expect(ALERTS_RT_CACHE_TTL_MS).toBeLessThan(60_000);
+    // Cache age is the only lag this API adds on top of upstream, so the
+    // default stays comfortably under a minute. Raising it toward the ~180s
+    // upstream cadence would mean surfacing cache age on the response first.
+    // Guard the bound, not the number.
+    expect(config.alertsRtCacheTtlMs).toBeLessThan(60_000);
   });
 
   it('uses the shared TTL for every vehicle feed path', () => {

@@ -43,7 +43,8 @@ All options are environment variables. Defaults work out of the box.
 | `PORT` | `3000` | HTTP listen port |
 | `HOST` | `0.0.0.0` | HTTP listen host |
 | `DB_PATH` | `./data/mta.db` | SQLite database path |
-| `RT_CACHE_TTL_MS` | `10000` | Realtime cache TTL in milliseconds for the vehicle feeds. Service alerts use a fixed 30s instead (see [Realtime GTFS-RT](#realtime-gtfs-rt-in-memory-10s-ttl)) |
+| `RT_CACHE_TTL_MS` | `10000` | Realtime cache TTL in milliseconds for the vehicle feeds |
+| `ALERTS_RT_CACHE_TTL_MS` | `30000` | Realtime cache TTL in milliseconds for the service alerts feed only, which publishes far less often (see [Realtime GTFS-RT](#realtime-gtfs-rt-in-memory-10s-ttl)) |
 | `RT_FETCH_TIMEOUT_MS` | `10000` | Upstream realtime fetch timeout in milliseconds |
 | `STATIC_FETCH_TIMEOUT_MS` | `60000` | Upstream static GTFS ZIP fetch timeout in milliseconds (used by `bun run seed` and CI) |
 | `DB_URL` | _(unset)_ | Bucket base URL to download a prebuilt `mta.db` from on boot (see Deployment). When unset, no download happens |
@@ -377,7 +378,7 @@ These feeds are the origin of all schedule data, but the running API doesn't fet
 
 Fetched on demand, cached per feed path, with promise deduplication to prevent concurrent requests from triggering parallel upstream fetches.
 
-The vehicle feeds below share one TTL (`RT_CACHE_TTL_MS`, default 10s), which sits above the publish period of eight of the ten so nearly every fetch returns new data. Service alerts are the exception: they republish on the order of minutes at ~570KB, roughly 6x the largest vehicle feed, so they use a fixed 30s TTL (`ALERTS_RT_CACHE_TTL_MS` in `src/services/feed.service.ts`).
+The vehicle feeds below share one TTL (`RT_CACHE_TTL_MS`, default 10s), which sits above the publish period of eight of the ten so nearly every fetch returns new data. Service alerts are the exception: they republish on the order of minutes at ~570KB, roughly 6x the largest vehicle feed, so they get their own TTL (`ALERTS_RT_CACHE_TTL_MS`, default 30s).
 
 **No API key required.** Binary protobuf, decoded via `protobufjs`.
 
