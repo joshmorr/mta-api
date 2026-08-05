@@ -21,11 +21,10 @@ jobs:
       # Bucket name + Fly app are non-secret; store them as repo Variables.
       BUCKET: ${{ vars.TIGRIS_BUCKET }}
       FLY_APP: ${{ vars.FLY_APP }}
-      # Tigris S3 credentials (from `fly storage create`) as repo Secrets.
-      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-      AWS_ENDPOINT_URL_S3: ${{ secrets.AWS_ENDPOINT_URL_S3 }}
-      AWS_REGION: auto
+      # Tigris S3 credentials are deliberately NOT job-level env: job-level vars are
+      # inherited by every step, including `bun install`, which executes dependency
+      # lifecycle scripts. Scoped to the publish step instead, the only one that needs
+      # them, so a compromised package can't read them out of the environment.
     steps:
       - uses: actions/checkout@v5
 
@@ -60,14 +59,24 @@ jobs:
         # a booting instance never sees a new version before its gz is complete.
         # --acl public-read: instances fetch these over unsigned HTTP (fetch-db.ts),
         # so the objects must be anonymously readable even on a public-enabled bucket.
+        # Tigris S3 credentials (from `fly storage create`) as repo Secrets.
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_ENDPOINT_URL_S3: ${{ secrets.AWS_ENDPOINT_URL_S3 }}
+          AWS_REGION: auto
         run: |
           aws s3 cp ./build/mta.db.gz     "s3://${BUCKET}/mta.db.gz"     --acl public-read --endpoint-url "$AWS_ENDPOINT_URL_S3"
           aws s3 cp ./build/mta.db.sha256 "s3://${BUCKET}/mta.db.sha256" --acl public-read --endpoint-url "$AWS_ENDPOINT_URL_S3"
           aws s3 cp ./build/mta.db.version "s3://${BUCKET}/mta.db.version" --acl public-read --endpoint-url "$AWS_ENDPOINT_URL_S3"
 
+      - name: Set up flyctl
+        # Pinned to a full commit SHA, not @master: a mutable ref would run whatever
+        # upstream pushes next in a job that holds FLY_API_TOKEN. ed8efb3 == tag 1.6/v1.
+        uses: superfly/flyctl-actions/setup-flyctl@ed8efb33836e8b2096c7fd3ba1c8afe303ebbff1
+
       - name: Roll the Fly app
         # Restart machines so they download the freshly published DB on boot.
-        uses: superfly/flyctl-actions/setup-flyctl@master
-      - run: flyctl apps restart "$FLY_APP"
+        run: flyctl apps restart "$FLY_APP"
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
