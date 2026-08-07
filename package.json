@@ -1,8 +1,12 @@
 {
   "name": "mta-api",
+  "bin": {
+    "mta-mcp": "src/mcp/stdio.ts"
+  },
   "scripts": {
     "dev": "bun run --hot src/index.ts",
     "start": "bun run src/index.ts",
+    "mcp": "bun run src/mcp/stdio.ts",
     "build": "bun build src/index.ts --outdir dist --target bun",
     "openapi:dump": "DB_PATH=:memory: bun run scripts/openapi.ts",
     "seed": "bun run scripts/seed.ts",
