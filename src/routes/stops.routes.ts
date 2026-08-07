@@ -1,13 +1,5 @@
 import { createRoute, z } from '@hono/zod-openapi';
-import {
-  findStopsByProximity,
-  findStopsByName,
-  getAllStops,
-  getPlatformIds,
-  getStopById,
-  getPlatforms,
-  getParentId,
-} from '../db/queries/stops';
+import { searchStops, getStopDetail } from '../services/stops.service';
 import { createApiRouter } from '../utils/openapi';
 import {
   StopListResponseSchema,
@@ -41,29 +33,8 @@ const listStopsRoute = createRoute({
 });
 
 stopsRouter.openapi(listStopsRoute, (c) => {
-  const { q, lat, lon, feed: feedId, radius, limit } = c.req.valid('query');
-
-  let rows;
-
-  if (lat !== undefined && lon !== undefined) {
-    const latDelta = radius / 111_000;
-    const lonDelta = radius / (111_000 * Math.cos((lat * Math.PI) / 180));
-    rows = findStopsByProximity(lat, lon, latDelta, lonDelta, limit, feedId);
-  } else if (q) {
-    rows = findStopsByName(q, limit, feedId);
-  } else {
-    rows = getAllStops(limit, feedId);
-  }
-
-  const stops = rows.map((s) => ({
-    feed_id:   s.feed_id as 'subway' | 'lirr' | 'mnr',
-    stop_id:   s.stop_id,
-    stop_name: s.stop_name,
-    lat:       s.stop_lat,
-    lon:       s.stop_lon,
-    platforms: s.feed_id === 'subway' ? getPlatformIds(s.feed_id, s.stop_id) : [],
-  }));
-
+  const { q, lat, lon, feed, radius, limit } = c.req.valid('query');
+  const stops = searchStops({ q, lat, lon, feed, radius, limit });
   return c.json({ stops }, 200 as const);
 });
 
@@ -93,36 +64,11 @@ stopsRouter.openapi(getStopRoute, (c) => {
   const { stop_id: stopId } = c.req.valid('param');
   const { feed: feedId } = c.req.valid('query');
 
-  const stop = getStopById(stopId, feedId);
+  const stop = getStopDetail(stopId, feedId);
 
   if (!stop) {
     return c.json({ error: `Stop ${stopId} not found`, code: 'NOT_FOUND' }, 404 as const);
   }
 
-  const parentId = stop.feed_id === 'subway' && stop.location_type === 0
-    ? getParentId(stop.feed_id, stopId) ?? stopId
-    : stopId;
-  const parent = parentId !== stopId
-    ? getStopById(parentId, stop.feed_id) ?? stop
-    : stop;
-
-  const platforms = parent.feed_id === 'subway' ? getPlatforms(parent.feed_id, parent.stop_id) : [];
-
-  return c.json({
-    feed_id:   parent.feed_id as 'subway' | 'lirr' | 'mnr',
-    stop_id:   parent.stop_id,
-    stop_name: parent.stop_name,
-    lat:       parent.stop_lat,
-    lon:       parent.stop_lon,
-    platforms: platforms.map((platform) => ({
-      stop_id:   platform.stop_id,
-      direction: inferDirection(platform.stop_id),
-    })),
-  }, 200 as const);
+  return c.json(stop, 200 as const);
 });
-
-function inferDirection(stopId: string): string {
-  if (stopId.endsWith('N')) return 'Uptown / Northbound';
-  if (stopId.endsWith('S')) return 'Downtown / Southbound';
-  return stopId;
-}
