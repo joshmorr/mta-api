@@ -420,8 +420,6 @@ All seven are read-only and non-destructive.
 
 The [feed scoping](#feed-scoping) rule applies: `mta_get_stop`, `mta_get_route`, `mta_get_arrivals`, and `mta_get_vehicles` all require `feed`, and each tool's description explains why. `mta_get_alerts` is the exception — alerts for all three systems arrive on one upstream feed, so it filters by route or stop instead.
 
-There is no health tool; `GET /health` exists for load balancers, not for agents.
-
 Realtime tools degrade the way the HTTP endpoints do: when an upstream feed cannot be reached, cached data is returned with `stale: true` and a `feed_error`, rather than the call failing.
 
 ---
