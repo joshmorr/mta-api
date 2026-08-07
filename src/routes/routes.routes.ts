@@ -1,20 +1,9 @@
 import { createRoute, z } from '@hono/zod-openapi';
-import { getAllRoutes, getRouteById } from '../db/queries/routes';
-import type { RouteRow } from '../db/queries/routes';
+import { listRoutes, getRoute } from '../services/routes.service';
 import { createApiRouter } from '../utils/openapi';
 import { RouteListResponseSchema, RouteResponseSchema, ErrorSchema } from '../schemas/api';
 
 export const routesRouter = createApiRouter();
-
-function toRouteResponse(r: RouteRow) {
-  return {
-    feed_id:   r.feed_id as 'subway' | 'lirr' | 'mnr',
-    route_id:  r.route_id,
-    name:      r.route_short_name ?? r.route_long_name ?? r.route_id,
-    long_name: r.route_long_name ?? r.route_short_name ?? r.route_id,
-    color:     r.route_color ?? '',
-  };
-}
 
 const listRoutesRoute = createRoute({
   method: 'get',
@@ -36,8 +25,7 @@ const listRoutesRoute = createRoute({
 
 routesRouter.openapi(listRoutesRoute, (c) => {
   const { feed } = c.req.valid('query');
-  const routes = getAllRoutes(feed).map(toRouteResponse);
-  return c.json({ routes }, 200 as const);
+  return c.json({ routes: listRoutes(feed) }, 200 as const);
 });
 
 const getRouteRoute = createRoute({
@@ -65,17 +53,11 @@ routesRouter.openapi(getRouteRoute, (c) => {
   const { route_id: routeId } = c.req.valid('param');
   const { feed: feedId } = c.req.valid('query');
 
-  const route = getRouteById(routeId, feedId);
+  const route = getRoute(routeId, feedId);
 
   if (!route) {
     return c.json({ error: `Route ${routeId} not found`, code: 'NOT_FOUND' }, 404 as const);
   }
 
-  return c.json({
-    feed_id:   route.feed_id as 'subway' | 'lirr' | 'mnr',
-    route_id:  route.route_id,
-    name:      route.route_short_name ?? route.route_long_name ?? route.route_id,
-    long_name: route.route_long_name ?? route.route_short_name ?? route.route_id,
-    color:     route.route_color ?? '',
-  }, 200 as const);
+  return c.json(route, 200 as const);
 });
