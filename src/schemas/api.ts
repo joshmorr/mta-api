@@ -1,4 +1,8 @@
-import { z } from 'zod';
+// `z` comes from @hono/zod-openapi, not from 'zod' directly: it is the same zod
+// instance with `.openapi()` patched onto the prototype. Importing 'zod' here
+// works only when some other module happens to have imported
+// @hono/zod-openapi first, which leaves this file's evaluation order-dependent.
+import { z } from '@hono/zod-openapi';
 
 export const FeedTypeSchema = z.enum(['subway', 'lirr', 'mnr']).openapi({
   description: 'Transit feed identifier',
