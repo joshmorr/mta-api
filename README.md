@@ -187,10 +187,12 @@ Live arrivals at a stop, sourced from GTFS-RT feeds filtered against the active 
 | `feed` | string | **required** | One of `subway`, `lirr`, `mnr` |
 | `limit` | number | `5` | Max arrivals (max 50) |
 | `routes` | string | all | Comma-separated route filter, e.g. `1,2,3` |
+| `direction` | string | all | `NORTH` or `SOUTH`. Subway only — LIRR/MNR arrivals never carry a direction, so this excludes them entirely. |
 
 ```
 GET /arrivals?stop=127N&feed=subway
 GET /arrivals?stop=127N&feed=subway&limit=3&routes=1,2
+GET /arrivals?stop=127&feed=subway&direction=NORTH
 GET /arrivals?stop=1&feed=lirr
 ```
 
@@ -210,13 +212,27 @@ GET /arrivals?stop=1&feed=lirr
       "trip_id": "GO103_25_6558",
       "arrival_time": 1773606240,
       "arrival_in_seconds": 840,
-      "status": "IN_TRANSIT_TO"
+      "departure_time": 1773606240,
+      "departure_in_seconds": 840,
+      "delay_seconds": null,
+      "destination_stop_id": "5",
+      "destination": "Oyster Bay",
+      "direction": null,
+      "direction_id": 0,
+      "direction_source": "rt_direction_id",
+      "train_number": "2306",
+      "status": "IN_TRANSIT_TO",
+      "source": "realtime"
     }
   ]
 }
 ```
 
 `arrival_time` and `arrival_in_seconds` are `null` for departure-only updates (e.g. at origin terminals where a train originates rather than arrives). The arrival is still included and sorted by its departure time.
+
+`destination`/`destination_stop_id` is the trip's true terminus — the last stop time update in the feed, not a static `trip_headsign` — resolved with zero truncation across all three feeds. For a subway platform ID this resolves to the parent station's name, not the platform.
+
+Direction is feed-honest, not uniform, because the three systems don't publish the same signal: subway `direction` (`NORTH`/`SOUTH`, `direction_source: "stop_suffix"`) comes from the matched platform's `N`/`S` suffix and has 100% coverage; LIRR `direction_id` (`0`/`1`, `direction_source: "rt_direction_id"`) is branch-relative as published by the railroad, not a compass direction — `direction_id=1` on a train headed to Penn Station means inbound, not south; Metro-North publishes neither, because its direction *is* `destination`. Any field the feed doesn't publish for a given trip is `null`, including `status`, `delay_seconds`, and `train_number` (LIRR/MNR only).
 
 When the upstream RT fetch fails but a cached feed is available, the response is served with `stale: true` and `feed_error` describing the reason.
 

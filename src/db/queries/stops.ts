@@ -128,3 +128,33 @@ export function getParentId(feedId: FeedId, stopId: string): string | null {
     .get(feedId, stopId);
   return row?.parent_station ?? null;
 }
+
+export type ResolvedStopName = { stop_id: string; stop_name: string };
+
+/**
+ * Batch-resolve display names for a set of stop IDs, self-joining a subway
+ * platform onto its parent station so the name is the station ("Jamaica
+ * Center-Parsons/Archer"), not the platform. LIRR/MNR stops have no parent
+ * and resolve to themselves. One query for the whole set, mirroring
+ * `getRoutesByIds` - callers key the result by the *original* input ID.
+ */
+export function getStopNamesByIds(feedId: FeedId, stopIds: string[]): Map<string, ResolvedStopName> {
+  if (!stopIds.length) return new Map();
+
+  const placeholders = stopIds.map(() => '?').join(',');
+  const rows = db
+    .query<
+      { input_stop_id: string; resolved_stop_id: string; stop_name: string },
+      Array<string | FeedId>
+    >(
+      `SELECT s.stop_id AS input_stop_id,
+              COALESCE(p.stop_id, s.stop_id) AS resolved_stop_id,
+              COALESCE(p.stop_name, s.stop_name) AS stop_name
+       FROM stops s
+       LEFT JOIN stops p ON p.feed_id = s.feed_id AND p.stop_id = s.parent_station
+       WHERE s.feed_id = ? AND s.stop_id IN (${placeholders})`,
+    )
+    .all(feedId, ...stopIds);
+
+  return new Map(rows.map((r) => [r.input_stop_id, { stop_id: r.resolved_stop_id, stop_name: r.stop_name }]));
+}

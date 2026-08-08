@@ -18,6 +18,8 @@ const getArrivalsRoute = createRoute({
       feed: z.enum(['subway', 'lirr', 'mnr']).openapi({ description: 'Feed the stop belongs to' }),
       limit: z.coerce.number({ message: 'must be a number' }).int().positive({ message: 'must be greater than 0' }).default(5).transform((n) => Math.min(n, 50)).openapi({ description: 'Max arrivals to return (clamped to 50, default 5)', example: 5 }),
       routes: z.string().optional().openapi({ description: 'Comma-separated route IDs to filter by', example: 'A,C,E' }),
+      direction: z.enum(['NORTH', 'SOUTH']).optional()
+        .openapi({ description: 'Filter to arrivals in this compass direction. Subway only - LIRR/MNR arrivals never carry a direction, so this excludes them entirely.' }),
     }),
   },
   responses: {
@@ -29,13 +31,13 @@ const getArrivalsRoute = createRoute({
 });
 
 arrivalsRouter.openapi(getArrivalsRoute, async (c) => {
-  const { stop: stopId, feed: feedId, limit, routes: routesParam } = c.req.valid('query');
+  const { stop: stopId, feed: feedId, limit, routes: routesParam, direction } = c.req.valid('query');
   const routeFilter = routesParam
     ? routesParam.split(',').map((r) => r.trim()).filter(Boolean)
     : undefined;
 
   try {
-    const result = await getArrivalsForStop(stopId, limit, feedId, routeFilter);
+    const result = await getArrivalsForStop(stopId, limit, feedId, routeFilter, direction);
     return c.json(result, 200 as const);
   } catch (err) {
     if (err instanceof NotFoundError) {

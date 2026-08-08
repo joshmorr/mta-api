@@ -105,15 +105,26 @@ export const ArrivalSchema = z.object({
   trip_id: z.string(),
   arrival_time: z.number().nullable().openapi({ description: 'Unix timestamp of arrival, or null for departure-only updates' }),
   arrival_in_seconds: z.number().nullable(),
+  departure_time: z.number().nullable().openapi({ description: 'Unix timestamp of departure, or null if not published' }),
+  departure_in_seconds: z.number().nullable(),
+  delay_seconds: z.number().nullable().openapi({ description: 'Seconds late (positive) or early (negative); null if not published' }),
+  destination_stop_id: z.string().nullable().openapi({ description: "The trip's true terminus - the last stop time update in the feed" }),
+  destination: z.string().nullable().openapi({ description: 'Display name of destination_stop_id', example: 'Penn Station' }),
+  direction: z.enum(['NORTH', 'SOUTH']).nullable()
+    .openapi({ description: 'Compass direction at this station, from the matched platform suffix. Subway only.' }),
+  direction_id: z.union([z.literal(0), z.literal(1)]).nullable()
+    .openapi({ description: 'Branch-relative direction as published by LIRR - not a compass direction. LIRR only.' }),
+  direction_source: z.enum(['stop_suffix', 'rt_direction_id']).nullable(),
+  train_number: z.string().nullable().openapi({ description: 'LIRR/MNR train number', example: '2306' }),
   status: z.enum(['INCOMING_AT', 'STOPPED_AT', 'IN_TRANSIT_TO']).nullable()
     .openapi({ description: 'Vehicle status, or null if this feed doesn\'t publish it for this trip' }),
+  source: z.literal('realtime'),
 }).openapi('Arrival');
 
 export const ArrivalResponseSchema = z.object({
   feed_id: FeedTypeSchema,
   stop_id: z.string(),
   stop_name: z.string(),
-  direction: z.string().optional(),
   generated_at: z.number().openapi({ description: 'Unix timestamp when the feed was generated' }),
   stale: z.boolean(),
   feed_error: z.string().optional(),

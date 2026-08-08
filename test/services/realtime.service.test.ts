@@ -9,7 +9,7 @@ import {
   NotFoundError,
 } from '../../src/services/realtime.service';
 import type { FeedMessage } from '../../src/types/gtfs';
-import { resetDb, seedSubway, seedLirr } from '../helpers/seed';
+import { resetDb, seedSubway, seedLirr, seedMnr } from '../helpers/seed';
 import { db } from '../../src/db/client';
 
 // All dates chosen to have unambiguous NY equivalents:
@@ -471,6 +471,259 @@ describe('route names on arrivals', () => {
     expect(result.arrivals).toHaveLength(1);
     expect(result.arrivals[0].route_name).toBe('GHOST');
     expect(result.arrivals[0].route_long_name).toBe('GHOST');
+  });
+});
+
+describe('destination and direction on arrivals', () => {
+  beforeEach(() => {
+    resetDb();
+    seedSubway();
+    db.run(`UPDATE calendar SET saturday = 1, sunday = 1 WHERE service_id = 'WKDY'`);
+  });
+
+  function seedLirrSchedule(): void {
+    seedLirr();
+    db.run(
+      `INSERT INTO trips (feed_id, trip_id, route_id, service_id, direction_id, shape_id)
+       VALUES ('lirr', 'L1', 'PW', 'DAILY', 0, NULL)`,
+    );
+    db.run(
+      `INSERT INTO stop_times (feed_id, trip_id, stop_id, arrival_time, departure_time, stop_sequence)
+       VALUES ('lirr', 'L1', '1', '10:00:00', '10:00:00', 1)`,
+    );
+    db.run(
+      `INSERT INTO calendar (feed_id, service_id, monday, tuesday, wednesday, thursday, friday, saturday, sunday, start_date, end_date)
+       VALUES ('lirr', 'DAILY', 1, 1, 1, 1, 1, 1, 1, '20200101', '20991231')`,
+    );
+  }
+
+  function seedMnrSchedule(): void {
+    seedMnr();
+    db.run(
+      `INSERT INTO trips (feed_id, trip_id, route_id, service_id, direction_id, shape_id)
+       VALUES ('mnr', 'M1', 'HUDSON', 'DAILY', 0, NULL)`,
+    );
+    db.run(
+      `INSERT INTO stop_times (feed_id, trip_id, stop_id, arrival_time, departure_time, stop_sequence)
+       VALUES ('mnr', 'M1', '1', '10:00:00', '10:00:00', 1)`,
+    );
+    db.run(
+      `INSERT INTO calendar (feed_id, service_id, monday, tuesday, wednesday, thursday, friday, saturday, sunday, start_date, end_date)
+       VALUES ('mnr', 'DAILY', 1, 1, 1, 1, 1, 1, 1, '20200101', '20991231')`,
+    );
+  }
+
+  it('resolves subway destination to the parent station name, not the platform', async () => {
+    // ACE-style: many stop time updates, destination is the LAST one.
+    const now = pinClockToMonday();
+    stubFetchWith(await encodeFeedMessage({
+      header: { gtfsRealtimeVersion: '2.0', timestamp: now },
+      entity: [
+        {
+          id: 'a',
+          tripUpdate: {
+            trip: { tripId: 'T1', routeId: '1' },
+            stopTimeUpdate: [
+              { stopId: '127N', arrival: { time: now + 60 } },
+              { stopId: '127S', arrival: { time: now + 300 } }, // last STU = true terminus
+            ],
+          },
+        },
+      ],
+    }));
+
+    const result = await getArrivalsForStop('127', 10, 'subway');
+    const arrival = result.arrivals.find((a) => a.trip_id === 'T1' && a.arrival_in_seconds === 60);
+    expect(arrival?.destination_stop_id).toBe('127'); // resolved to parent, not '127S'
+    expect(arrival?.destination).toBe('Times Sq-42 St');
+  });
+
+  it('gives subway direction from the matched platform suffix', async () => {
+    const now = pinClockToMonday();
+    stubFetchWith(await encodeFeedMessage({
+      header: { gtfsRealtimeVersion: '2.0', timestamp: now },
+      entity: [
+        {
+          id: 'a',
+          tripUpdate: {
+            trip: { tripId: 'T1', routeId: '1' },
+            stopTimeUpdate: [
+              { stopId: '127N', arrival: { time: now + 60 } },
+              { stopId: '127S', arrival: { time: now + 120 } },
+            ],
+          },
+        },
+      ],
+    }));
+
+    const result = await getArrivalsForStop('127', 10, 'subway');
+    const north = result.arrivals.find((a) => a.arrival_in_seconds === 60);
+    const south = result.arrivals.find((a) => a.arrival_in_seconds === 120);
+    expect(north?.direction).toBe('NORTH');
+    expect(north?.direction_source).toBe('stop_suffix');
+    expect(north?.direction_id).toBeNull();
+    expect(south?.direction).toBe('SOUTH');
+  });
+
+  it('filters arrivals by the direction query param', async () => {
+    const now = pinClockToMonday();
+    stubFetchWith(await encodeFeedMessage({
+      header: { gtfsRealtimeVersion: '2.0', timestamp: now },
+      entity: [
+        {
+          id: 'a',
+          tripUpdate: {
+            trip: { tripId: 'T1', routeId: '1' },
+            stopTimeUpdate: [
+              { stopId: '127N', arrival: { time: now + 60 } },
+              { stopId: '127S', arrival: { time: now + 120 } },
+            ],
+          },
+        },
+      ],
+    }));
+
+    const result = await getArrivalsForStop('127', 10, 'subway', undefined, 'SOUTH');
+    expect(result.arrivals).toHaveLength(1);
+    expect(result.arrivals[0].direction).toBe('SOUTH');
+  });
+
+  it('reads LIRR direction_id from the trip descriptor, branch-relative and not compass', async () => {
+    seedLirrSchedule();
+    const now = pinClockToMonday();
+    stubFetchWith(await encodeFeedMessage({
+      header: { gtfsRealtimeVersion: '2.0', timestamp: now },
+      entity: [
+        {
+          id: 'a',
+          tripUpdate: {
+            trip: { tripId: 'L1', routeId: 'PW', directionId: 1 },
+            stopTimeUpdate: [{ stopId: '1', arrival: { time: now + 60 } }],
+          },
+        },
+      ],
+    }));
+
+    const result = await getArrivalsForStop('1', 10, 'lirr');
+    expect(result.arrivals[0].direction_id).toBe(1);
+    expect(result.arrivals[0].direction).toBeNull();
+    expect(result.arrivals[0].direction_source).toBe('rt_direction_id');
+    expect(result.arrivals[0].destination_stop_id).toBe('1'); // flat model, no parent to resolve
+    expect(result.arrivals[0].destination).toBe('Penn Station');
+  });
+
+  it('leaves LIRR direction_id null when the trip descriptor omits it', async () => {
+    // optional uint32 direction_id defaults to 0 in proto2 - own-property
+    // presence must gate it or every LIRR trip reads as direction_id=0.
+    seedLirrSchedule();
+    const now = pinClockToMonday();
+    stubFetchWith(await encodeFeedMessage({
+      header: { gtfsRealtimeVersion: '2.0', timestamp: now },
+      entity: [
+        {
+          id: 'a',
+          tripUpdate: {
+            trip: { tripId: 'L1', routeId: 'PW' },
+            stopTimeUpdate: [{ stopId: '1', arrival: { time: now + 60 } }],
+          },
+        },
+      ],
+    }));
+
+    const result = await getArrivalsForStop('1', 10, 'lirr');
+    expect(result.arrivals[0].direction_id).toBeNull();
+    expect(result.arrivals[0].direction_source).toBeNull();
+  });
+
+  it('leaves both direction and direction_id null for MNR, whose direction IS destination', async () => {
+    seedMnrSchedule();
+    const now = pinClockToMonday();
+    stubFetchWith(await encodeFeedMessage({
+      header: { gtfsRealtimeVersion: '2.0', timestamp: now },
+      entity: [
+        {
+          id: 'a',
+          tripUpdate: {
+            trip: { tripId: 'M1', routeId: 'HUDSON', directionId: 0 },
+            stopTimeUpdate: [{ stopId: '1', arrival: { time: now + 60 } }],
+          },
+        },
+      ],
+    }));
+
+    const result = await getArrivalsForStop('1', 10, 'mnr');
+    expect(result.arrivals[0].direction).toBeNull();
+    expect(result.arrivals[0].direction_id).toBeNull();
+    expect(result.arrivals[0].direction_source).toBeNull();
+    expect(result.arrivals[0].destination).toBe('Grand Central');
+  });
+
+  it('reads train_number from the vehicle descriptor label, presence-checked', async () => {
+    seedLirrSchedule();
+    const now = pinClockToMonday();
+    stubFetchWith(await encodeFeedMessage({
+      header: { gtfsRealtimeVersion: '2.0', timestamp: now },
+      entity: [
+        {
+          id: 'a',
+          tripUpdate: {
+            trip: { tripId: 'L1', routeId: 'PW' },
+            stopTimeUpdate: [{ stopId: '1', arrival: { time: now + 60 } }],
+          },
+          vehicle: {
+            trip: { tripId: 'does-not-match', routeId: 'PW' },
+            vehicle: { label: '2306' },
+          },
+        },
+      ],
+    }));
+
+    const result = await getArrivalsForStop('1', 10, 'lirr');
+    expect(result.arrivals[0].train_number).toBe('2306');
+  });
+
+  it('leaves delay_seconds null when not published, and reads it (including a genuine 0) when present', async () => {
+    const now = pinClockToMonday();
+    stubFetchWith(await encodeFeedMessage({
+      header: { gtfsRealtimeVersion: '2.0', timestamp: now },
+      entity: [
+        {
+          id: 'a',
+          tripUpdate: {
+            trip: { tripId: 'T1', routeId: '1' },
+            stopTimeUpdate: [
+              { stopId: '127N', arrival: { time: now + 60 } }, // no delay field at all
+              { stopId: '127S', arrival: { time: now + 120, delay: 0 } }, // on-time, genuinely 0
+            ],
+          },
+        },
+      ],
+    }));
+
+    const result = await getArrivalsForStop('127', 10, 'subway');
+    const noDelay = result.arrivals.find((a) => a.arrival_in_seconds === 60);
+    const onTime = result.arrivals.find((a) => a.arrival_in_seconds === 120);
+    expect(noDelay?.delay_seconds).toBeNull();
+    expect(onTime?.delay_seconds).toBe(0);
+  });
+
+  it('stamps every arrival source: "realtime"', async () => {
+    const now = pinClockToMonday();
+    stubFetchWith(await encodeFeedMessage({
+      header: { gtfsRealtimeVersion: '2.0', timestamp: now },
+      entity: [
+        {
+          id: 'a',
+          tripUpdate: {
+            trip: { tripId: 'T1', routeId: '1' },
+            stopTimeUpdate: [{ stopId: '127N', arrival: { time: now + 60 } }],
+          },
+        },
+      ],
+    }));
+
+    const result = await getArrivalsForStop('127', 10, 'subway');
+    expect(result.arrivals[0].source).toBe('realtime');
   });
 });
 

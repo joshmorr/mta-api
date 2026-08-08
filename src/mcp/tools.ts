@@ -170,9 +170,14 @@ export function registerMtaTools(server: McpServer): void {
       description:
         'Live upcoming arrivals at a stop, soonest first, from the realtime GTFS-RT feeds. ' +
         `${FEED_NOTE}\n\n` +
-        'Each arrival gives the route, trip ID, a Unix arrival timestamp, seconds until arrival, and ' +
-        'whether the train is approaching, stopped, or in transit. Pass a parent station ID to cover ' +
-        'every platform, or a specific platform ID for one direction.\n\n' +
+        'Each arrival gives the route, trip ID, a Unix arrival timestamp, seconds until arrival, ' +
+        'destination (the true terminus, from the last stop time update), and whether the train is ' +
+        'approaching, stopped, or in transit - any of these may be null when the feed doesn\'t publish ' +
+        'them for that trip. Pass a parent station ID to cover every platform, or a specific platform ID ' +
+        'for one direction (or use the `direction` filter instead).\n\n' +
+        'Direction is feed-honest, not uniform: subway `direction` (NORTH/SOUTH) comes from the matched ' +
+        'platform, LIRR `direction_id` (0/1) is branch-relative (not compass) and comes straight from the ' +
+        "railroad, and Metro-North has neither - its direction IS `destination`.\n\n" +
         `${ROUTE_NAME_NOTE}\n\n` +
         'Answers "when is the next train". Use mta_search_stops first to turn a station name into an ID.\n\n' +
         'The response carries `stale: true` when the upstream feed could not be reached and cached data ' +
@@ -182,9 +187,9 @@ export function registerMtaTools(server: McpServer): void {
       outputSchema: ArrivalResponseSchema,
       annotations: REALTIME,
     },
-    async ({ stop, feed, limit, routes }) => {
+    async ({ stop, feed, limit, routes, direction }) => {
       try {
-        return ok(await getArrivalsForStop(stop, limit, feed, routes));
+        return ok(await getArrivalsForStop(stop, limit, feed, routes, direction));
       } catch (err) {
         return toToolError(err, `Check the stop exists in the ${feed} feed with mta_search_stops.`);
       }

@@ -220,9 +220,6 @@
           "stop_name": {
             "type": "string"
           },
-          "direction": {
-            "type": "string"
-          },
           "generated_at": {
             "type": "number",
             "description": "Unix timestamp when the feed was generated"
@@ -289,6 +286,76 @@
             "type": "number",
             "nullable": true
           },
+          "departure_time": {
+            "type": "number",
+            "nullable": true,
+            "description": "Unix timestamp of departure, or null if not published"
+          },
+          "departure_in_seconds": {
+            "type": "number",
+            "nullable": true
+          },
+          "delay_seconds": {
+            "type": "number",
+            "nullable": true,
+            "description": "Seconds late (positive) or early (negative); null if not published"
+          },
+          "destination_stop_id": {
+            "type": "string",
+            "nullable": true,
+            "description": "The trip's true terminus - the last stop time update in the feed"
+          },
+          "destination": {
+            "type": "string",
+            "nullable": true,
+            "description": "Display name of destination_stop_id",
+            "example": "Penn Station"
+          },
+          "direction": {
+            "type": "string",
+            "nullable": true,
+            "enum": [
+              "NORTH",
+              "SOUTH",
+              null
+            ],
+            "description": "Compass direction at this station, from the matched platform suffix. Subway only."
+          },
+          "direction_id": {
+            "anyOf": [
+              {
+                "type": "number",
+                "enum": [
+                  0
+                ]
+              },
+              {
+                "type": "number",
+                "enum": [
+                  1
+                ]
+              },
+              {
+                "nullable": true
+              }
+            ],
+            "description": "Branch-relative direction as published by LIRR - not a compass direction. LIRR only."
+          },
+          "direction_source": {
+            "type": "string",
+            "nullable": true,
+            "enum": [
+              "stop_suffix",
+              "rt_direction_id",
+              null
+            ]
+          },
+          "train_number": {
+            "type": "string",
+            "nullable": true,
+            "description": "LIRR/MNR train number",
+            "example": "2306"
+          },
           "status": {
             "type": "string",
             "nullable": true,
@@ -299,6 +366,12 @@
               null
             ],
             "description": "Vehicle status, or null if this feed doesn't publish it for this trip"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "realtime"
+            ]
           }
         },
         "required": [
@@ -309,7 +382,17 @@
           "trip_id",
           "arrival_time",
           "arrival_in_seconds",
-          "status"
+          "departure_time",
+          "departure_in_seconds",
+          "delay_seconds",
+          "destination_stop_id",
+          "destination",
+          "direction",
+          "direction_id",
+          "direction_source",
+          "train_number",
+          "status",
+          "source"
         ]
       },
       "VehicleListResponse": {
@@ -935,6 +1018,20 @@
             "required": false,
             "description": "Comma-separated route IDs to filter by",
             "name": "routes",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "NORTH",
+                "SOUTH"
+              ],
+              "description": "Filter to arrivals in this compass direction. Subway only - LIRR/MNR arrivals never carry a direction, so this excludes them entirely."
+            },
+            "required": false,
+            "description": "Filter to arrivals in this compass direction. Subway only - LIRR/MNR arrivals never carry a direction, so this excludes them entirely.",
+            "name": "direction",
             "in": "query"
           }
         ],

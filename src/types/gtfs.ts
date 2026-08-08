@@ -99,10 +99,17 @@ export interface StopTimeEvent {
 
 export interface VehiclePosition {
   trip: TripDescriptor;
+  vehicle?: VehicleDescriptor;
   currentStopSequence?: number;
   stopId?: string;
   currentStatus?: VehicleStopStatus;
   timestamp?: number | Long;
+}
+
+export interface VehicleDescriptor {
+  id?: string;
+  label?: string;
+  licensePlate?: string;
 }
 
 export interface Alert {

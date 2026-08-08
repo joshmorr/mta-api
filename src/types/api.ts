@@ -32,15 +32,36 @@ export interface Arrival {
   trip_id: string;
   arrival_time: number | null;
   arrival_in_seconds: number | null;
+  /** `null` for departure-only updates (no scheduled arrival at this stop). */
+  departure_time: number | null;
+  departure_in_seconds: number | null;
+  /** Seconds late (positive) or early (negative); `null` if not published. */
+  delay_seconds: number | null;
+  /** The last stop time update's stop, i.e. the trip's true terminus. */
+  destination_stop_id: string | null;
+  destination: string | null;
+  /**
+   * Compass direction at *this* station, from the matched platform suffix.
+   * Subway only - LIRR/MNR platforms carry no N/S suffix.
+   */
+  direction: 'NORTH' | 'SOUTH' | null;
+  /**
+   * Branch-relative direction, LIRR only. Not a compass direction -
+   * `direction_id=1` on a "Penn Station" trip means inbound, not south.
+   */
+  direction_id: 0 | 1 | null;
+  direction_source: 'stop_suffix' | 'rt_direction_id' | null;
+  /** LIRR/MNR train number, from the vehicle descriptor label. */
+  train_number: string | null;
   /** `null` when the feed doesn't publish a vehicle status for this trip. */
   status: VehicleStopStatus | null;
+  source: 'realtime';
 }
 
 export interface ArrivalResponse {
   feed_id: FeedId;
   stop_id: string;
   stop_name: string;
-  direction?: string;
   generated_at: number;
   stale: boolean;
   feed_error?: string;

@@ -60,6 +60,8 @@ export const GetArrivalsInput = z.object({
     .describe('Maximum arrivals to return, soonest first.'),
   routes: z.array(z.string().min(1)).nonempty().optional()
     .describe('Only return arrivals for these route IDs. Omit for every route serving the stop.'),
+  direction: z.enum(['NORTH', 'SOUTH']).optional()
+    .describe('Filter to arrivals in this compass direction. Subway only - LIRR/MNR arrivals never carry a direction, so this excludes them entirely.'),
 }).strict();
 
 export const GetVehiclesInput = z.object({
