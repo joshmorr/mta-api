@@ -37,6 +37,11 @@ const FEED_NOTE =
   'The MTA reuses IDs across systems, so `feed` selects which one: "subway", ' +
   '"lirr" (Long Island Rail Road), or "mnr" (Metro-North Railroad).';
 
+const ROUTE_NAME_NOTE =
+  'Always refer to a route by `route_name` — never by `route_id`. On LIRR and Metro-North the ID ' +
+  'is an opaque number, so showing it produces meaningless labels like "Route 4" where the rider ' +
+  'expects "Ronkonkoma Branch". On the subway `route_name` is the familiar bullet ("A", "7").';
+
 function ok<T>(structuredContent: T) {
   return {
     content: [{ type: 'text' as const, text: JSON.stringify(structuredContent, null, 2) }],
@@ -168,6 +173,7 @@ export function registerMtaTools(server: McpServer): void {
         'Each arrival gives the route, trip ID, a Unix arrival timestamp, seconds until arrival, and ' +
         'whether the train is approaching, stopped, or in transit. Pass a parent station ID to cover ' +
         'every platform, or a specific platform ID for one direction.\n\n' +
+        `${ROUTE_NAME_NOTE}\n\n` +
         'Answers "when is the next train". Use mta_search_stops first to turn a station name into an ID.\n\n' +
         'The response carries `stale: true` when the upstream feed could not be reached and cached data ' +
         'was served instead, with `feed_error` explaining why. Data is cached for about 10 seconds, so ' +
@@ -192,6 +198,7 @@ export function registerMtaTools(server: McpServer): void {
       description:
         'Every train currently active on a route, with its trip ID, the stop it is approaching or ' +
         `stopped at, and a Unix timestamp for the position. ${FEED_NOTE}\n\n` +
+        `${ROUTE_NAME_NOTE}\n\n` +
         'Answers "how many trains are running" or "where are they right now". For arrivals at a ' +
         'particular station use mta_get_arrivals instead — this is the whole-line view.\n\n' +
         'Use mta_list_routes to discover valid route IDs.',

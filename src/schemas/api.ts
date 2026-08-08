@@ -74,11 +74,34 @@ export const RouteListResponseSchema = z.object({
   routes: z.array(RouteResponseSchema),
 }).openapi('RouteListResponse');
 
+// --- Route identity (shared by arrivals and vehicles) ---
+
+const RouteIdField = z.string().openapi({
+  description:
+    'Internal GTFS route identifier. Not a display label — on LIRR and Metro-North it is an ' +
+    'opaque number ("4" is the Ronkonkoma Branch). Use `route_name` when showing this to a user.',
+  example: '4',
+});
+
+const RouteNameField = z.string().openapi({
+  description:
+    'Rider-facing name for the route: the subway bullet ("A", "7") or the commuter-rail branch ' +
+    '("Ronkonkoma Branch"). Never empty — falls back to `route_id` if the schedule names no route.',
+  example: 'Ronkonkoma Branch',
+});
+
+const RouteLongNameField = z.string().openapi({
+  description: 'Longer route name where one exists, otherwise the same value as `route_name`.',
+  example: 'Ronkonkoma Branch',
+});
+
 // --- Arrivals ---
 
 export const ArrivalSchema = z.object({
   feed_id: FeedTypeSchema,
-  route_id: z.string(),
+  route_id: RouteIdField,
+  route_name: RouteNameField,
+  route_long_name: RouteLongNameField,
   trip_id: z.string(),
   arrival_time: z.number().openapi({ description: 'Unix timestamp of arrival' }),
   arrival_in_seconds: z.number(),
@@ -108,7 +131,9 @@ export const VehicleResponseSchema = z.object({
 
 export const VehicleListResponseSchema = z.object({
   feed_id: FeedTypeSchema,
-  route_id: z.string(),
+  route_id: RouteIdField,
+  route_name: RouteNameField,
+  route_long_name: RouteLongNameField,
   generated_at: z.number(),
   vehicles: z.array(VehicleResponseSchema),
 }).openapi('VehicleListResponse');
