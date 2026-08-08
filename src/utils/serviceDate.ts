@@ -30,6 +30,24 @@ export function getNyDateParts(date: Date): {
   };
 }
 
+const WEEKDAYS_BY_JS_DAY: WeekdayColumn[] = [
+  'sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday',
+];
+
+/**
+ * The weekday column for a bare YYYYMMDD calendar date — no timezone
+ * involved. Unlike `getNyDateParts`, this doesn't resolve an instant against
+ * a timezone; a calendar date's day-of-week is the same regardless of where
+ * on Earth you compute it, so plain UTC-anchored `Date` arithmetic is exact
+ * and DST-irrelevant here.
+ */
+export function weekdayColumnForDate(yyyymmdd: string): WeekdayColumn {
+  const year = Number(yyyymmdd.slice(0, 4));
+  const month = Number(yyyymmdd.slice(4, 6));
+  const day = Number(yyyymmdd.slice(6, 8));
+  return WEEKDAYS_BY_JS_DAY[new Date(Date.UTC(year, month - 1, day)).getUTCDay()];
+}
+
 function getDatePart(parts: Intl.DateTimeFormatPart[], type: Intl.DateTimeFormatPartTypes): string {
   const part = parts.find((entry) => entry.type === type);
   if (!part) {

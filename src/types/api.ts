@@ -123,3 +123,102 @@ export interface ErrorResponse {
   error: string;
   code: string;
 }
+
+// --- Schedule (static timetable) ---
+
+export interface ScheduledDepartureDestination {
+  stop_id: string;
+  stop_name: string;
+  stop_sequence: number;
+  arrival_time: string | null;
+  arrival_timestamp: number | null;
+  /** Seconds between this departure and the arrival at `to`. */
+  duration_seconds: number | null;
+}
+
+export interface ScheduledDeparture {
+  feed_id: FeedId;
+  trip_id: string;
+  route_id: string;
+  route_name: string;
+  route_long_name: string;
+  service_id: string;
+  /** The specific YYYYMMDD service date this row's timestamps were computed against. */
+  service_date: string;
+  stop_id: string;
+  stop_sequence: number;
+  arrival_time: string | null;
+  departure_time: string;
+  /** `null` only when the stop_time has no arrival_time published. */
+  arrival_timestamp: number | null;
+  departure_timestamp: number;
+  departure_in_seconds: number;
+  headsign: string | null;
+  /** LIRR/MNR train number (trip_short_name); null on subway. */
+  train_number: string | null;
+  direction_id: 0 | 1 | null;
+  track: string | null;
+  /** LIRR/MNR fare period; null on subway, which has no such concept. */
+  peak: boolean | null;
+  pickup_type: number | null;
+  drop_off_type: number | null;
+  /** Present only when `to` was given. */
+  destination?: ScheduledDepartureDestination;
+}
+
+export interface ScheduleResponse {
+  feed_id: FeedId;
+  stop_id: string;
+  stop_name: string;
+  to_stop_id: string | null;
+  to_stop_name: string | null;
+  /** The service dates actually queried, in query order. */
+  service_dates: string[];
+  generated_at: number;
+  source: 'scheduled';
+  departures: ScheduledDeparture[];
+  /** Cursor for the next page (unix seconds), or `null` on a non-full page. */
+  next_after: number | null;
+}
+
+export interface TripStop {
+  stop_id: string;
+  stop_name: string;
+  parent_station_id: string | null;
+  stop_sequence: number;
+  arrival_time: string | null;
+  departure_time: string | null;
+  arrival_timestamp: number | null;
+  departure_timestamp: number | null;
+  track: string | null;
+  pickup_type: number | null;
+  drop_off_type: number | null;
+}
+
+export interface TripScheduleResponse {
+  feed_id: FeedId;
+  /** The trip_id as requested. */
+  trip_id: string;
+  /** The static trip_id the response actually describes — equals `trip_id` unless `matched_by` is `rt_trip_id_suffix`. */
+  resolved_trip_id: string;
+  matched_by: 'exact' | 'rt_trip_id_suffix';
+  route_id: string;
+  route_name: string;
+  route_long_name: string;
+  service_id: string;
+  /**
+   * The YYYYMMDD service date timestamps were computed against, or `null`
+   * when none of the candidate dates had this trip's service active — in
+   * that case every stop's `*_timestamp` is also `null`, but `*_time`
+   * (the raw HH:MM:SS) is still populated.
+   */
+  service_date: string | null;
+  direction_id: 0 | 1 | null;
+  headsign: string | null;
+  train_number: string | null;
+  peak: boolean | null;
+  source: 'scheduled';
+  origin: TripStop;
+  destination: TripStop;
+  stops: TripStop[];
+}

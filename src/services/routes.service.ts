@@ -3,6 +3,14 @@ import type { RouteRow } from '../db/queries/routes';
 import type { FeedId } from '../types/gtfs';
 import type { RouteResponse } from '../types/api';
 
+/** The only two RouteRow fields toRouteNames reads — narrow on purpose so
+ * other row shapes that carry route names (e.g. a schedule query's joined
+ * columns) satisfy this structurally without an awkward RouteRow cast. */
+type RouteNameSource = {
+  route_short_name: string | null;
+  route_long_name: string | null;
+};
+
 /**
  * GTFS lets either name be blank, and the MTA uses both conventions: subway
  * routes carry a short name (`A`) and no long name worth showing, while LIRR
@@ -15,7 +23,7 @@ import type { RouteResponse } from '../types/api';
  */
 export function toRouteNames(
   routeId: string,
-  row?: RouteRow,
+  row?: RouteNameSource,
 ): { route_name: string; route_long_name: string } {
   return {
     route_name:      row?.route_short_name ?? row?.route_long_name ?? routeId,
