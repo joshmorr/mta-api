@@ -103,8 +103,8 @@ export const ArrivalSchema = z.object({
   route_name: RouteNameField,
   route_long_name: RouteLongNameField,
   trip_id: z.string(),
-  arrival_time: z.number().openapi({ description: 'Unix timestamp of arrival' }),
-  arrival_in_seconds: z.number(),
+  arrival_time: z.number().nullable().openapi({ description: 'Unix timestamp of arrival, or null for departure-only updates' }),
+  arrival_in_seconds: z.number().nullable(),
   status: z.enum(['INCOMING_AT', 'STOPPED_AT', 'IN_TRANSIT_TO']),
 }).openapi('Arrival');
 

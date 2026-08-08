@@ -179,7 +179,7 @@ describe('getArrivalsForStop', () => {
     // Sorted by arrival_time ascending — 127S (+60) before 127N (+300)
     expect(result.arrivals[0].trip_id).toBe('T1');
     expect(result.arrivals[0].status).toBe('STOPPED_AT'); // pulled from vehicle entity
-    expect(result.arrivals[1].arrival_in_seconds).toBeGreaterThan(result.arrivals[0].arrival_in_seconds);
+    expect(result.arrivals[1].arrival_in_seconds!).toBeGreaterThan(result.arrivals[0].arrival_in_seconds!);
   });
 
   it('respects limit when more arrivals are available', async () => {

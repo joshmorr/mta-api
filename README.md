@@ -216,6 +216,8 @@ GET /arrivals?stop=1&feed=lirr
 }
 ```
 
+`arrival_time` and `arrival_in_seconds` are `null` for departure-only updates (e.g. at origin terminals where a train originates rather than arrives). The arrival is still included and sorted by its departure time.
+
 When the upstream RT fetch fails but a cached feed is available, the response is served with `stale: true` and `feed_error` describing the reason.
 
 ---

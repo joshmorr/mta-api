@@ -282,10 +282,12 @@
           },
           "arrival_time": {
             "type": "number",
-            "description": "Unix timestamp of arrival"
+            "nullable": true,
+            "description": "Unix timestamp of arrival, or null for departure-only updates"
           },
           "arrival_in_seconds": {
-            "type": "number"
+            "type": "number",
+            "nullable": true
           },
           "status": {
             "type": "string",

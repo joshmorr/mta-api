@@ -101,26 +101,29 @@ export async function getArrivalsForStop(
 
       for (const stu of stopTimeUpdate) {
         if (!platformIds.includes(stu.stopId)) continue;
-        if (!stu.arrival) continue;
 
-        const arrivalTime = toNumber(stu.arrival.time);
-        if (arrivalTime <= now) continue;
+        const refRaw = stu.arrival?.time ?? stu.departure?.time;
+        if (!refRaw) continue;
+        const refTime = toNumber(refRaw);
+        if (refTime <= now) continue;
 
         const status = toStopStatus(statusByTripId.get(trip.tripId));
+        const arrivalTime = stu.arrival ? toNumber(stu.arrival.time) : null;
 
         matched.push({
           feed_id: stop.feed_id,
           route_id: trip.routeId,
           trip_id: trip.tripId,
           arrival_time: arrivalTime,
-          arrival_in_seconds: arrivalTime - now,
+          arrival_in_seconds: arrivalTime !== null ? arrivalTime - now : null,
+          departure_time: arrivalTime !== null ? undefined : refTime,
           status,
         });
       }
     }
   }
 
-  matched.sort((a, b) => a.arrival_time - b.arrival_time);
+  matched.sort((a, b) => (a.arrival_time ?? a.departure_time ?? 0) - (b.arrival_time ?? b.departure_time ?? 0));
 
   return {
     feed_id: stop.feed_id,
@@ -133,7 +136,7 @@ export async function getArrivalsForStop(
   };
 }
 
-type RawArrival = Omit<Arrival, 'route_name' | 'route_long_name'>;
+type RawArrival = Omit<Arrival, 'route_name' | 'route_long_name'> & { departure_time?: number };
 
 /**
  * Resolve every distinct route in one query, then label each arrival.
@@ -148,14 +151,14 @@ function withRouteNames(feedId: FeedId, arrivals: RawArrival[]): Arrival[] {
     getRoutesByIds(feedId, distinctIds).map((row) => [row.route_id, row]),
   );
 
-  return arrivals.map(({ feed_id, route_id, trip_id, arrival_time, arrival_in_seconds, status }) => ({
+  return arrivals.map(({ feed_id, route_id, trip_id, arrival_time, arrival_in_seconds, status: s, ..._rest }) => ({
     feed_id,
     route_id,
     ...toRouteNames(route_id, rowById.get(route_id)),
     trip_id,
     arrival_time,
     arrival_in_seconds,
-    status,
+    status: s,
   }));
 }
 

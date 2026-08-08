@@ -30,8 +30,8 @@ export interface Arrival {
   route_name: string;
   route_long_name: string;
   trip_id: string;
-  arrival_time: number;
-  arrival_in_seconds: number;
+  arrival_time: number | null;
+  arrival_in_seconds: number | null;
   status: VehicleStopStatus;
 }
 
