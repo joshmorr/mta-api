@@ -32,7 +32,8 @@ export interface Arrival {
   trip_id: string;
   arrival_time: number | null;
   arrival_in_seconds: number | null;
-  status: VehicleStopStatus;
+  /** `null` when the feed doesn't publish a vehicle status for this trip. */
+  status: VehicleStopStatus | null;
 }
 
 export interface ArrivalResponse {

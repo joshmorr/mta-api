@@ -1,6 +1,6 @@
 import { getFeed } from '../cache/rtCache';
 import { getFeedPath } from './feed.service';
-import type { FeedId, FeedMessage } from '../types/gtfs';
+import type { FeedId, FeedMessage, VehiclePosition } from '../types/gtfs';
 import type { ArrivalResponse, Arrival, VehicleResponse } from '../types/api';
 import {
   getChildPlatformIds,
@@ -17,16 +17,26 @@ import { toNumber } from '../utils/realtime';
 
 // VehicleStopStatus is a proto enum; protobufjs decodes it as an int.
 // Map back to the string union our API contract returns.
-const VEHICLE_STOP_STATUS: Record<number, Arrival['status']> = {
+const VEHICLE_STOP_STATUS: Record<number, NonNullable<Arrival['status']>> = {
   0: 'INCOMING_AT',
   1: 'STOPPED_AT',
   2: 'IN_TRANSIT_TO',
 };
 
-function toStopStatus(raw: unknown): Arrival['status'] {
-  if (typeof raw === 'string') return raw as Arrival['status'];
+function toStopStatus(raw: unknown): NonNullable<Arrival['status']> {
+  if (typeof raw === 'string') return raw as NonNullable<Arrival['status']>;
   if (typeof raw === 'number' && raw in VEHICLE_STOP_STATUS) return VEHICLE_STOP_STATUS[raw];
   return 'IN_TRANSIT_TO';
+}
+
+// current_status defaults to IN_TRANSIT_TO in proto2, so protobufjs can't
+// distinguish "published as in-transit" from "not published at all" unless
+// we check own-property presence before decoding. Raw wire counts of
+// entities that actually publish it: MNR 44/227, subway ACE 38/76, LIRR
+// 60/60 - treating the default as data fabricates status for the rest.
+function presenceStatus(vehicle: VehiclePosition | undefined): Arrival['status'] {
+  if (!vehicle || !Object.prototype.hasOwnProperty.call(vehicle, 'currentStatus')) return null;
+  return toStopStatus(vehicle.currentStatus);
 }
 
 export async function getArrivalsForStop(
@@ -85,12 +95,15 @@ export async function getArrivalsForStop(
       overallFeedError = feed_error;
     }
 
-    // Index vehicle status by trip id once per feed message so the inner
+    // Index vehicle positions by trip id once per feed message so the inner
     // arrivals loop is O(1) per lookup instead of rescanning all entities.
-    const statusByTripId = new Map<string, unknown>();
+    // This covers LIRR/subway, where the vehicle lives on a *different*
+    // entity than the trip update (0 shared entities for LIRR: 121
+    // trip-only, 60 vehicle-only).
+    const vehicleByTripId = new Map<string, VehiclePosition>();
     for (const entity of feedMessage.entity) {
       const tripId = entity.vehicle?.trip?.tripId;
-      if (tripId) statusByTripId.set(tripId, entity.vehicle?.currentStatus);
+      if (tripId) vehicleByTripId.set(tripId, entity.vehicle as VehiclePosition);
     }
 
     for (const entity of feedMessage.entity) {
@@ -107,7 +120,10 @@ export async function getArrivalsForStop(
         const refTime = toNumber(refRaw);
         if (refTime <= now) continue;
 
-        const status = toStopStatus(statusByTripId.get(trip.tripId));
+        // Same-entity first: MNR carries tripUpdate and vehicle together on
+        // 226/226 entities, and its vehicle.trip.tripId never matches the
+        // tripUpdate's trip id, so the map lookup alone misses it entirely.
+        const status = presenceStatus(entity.vehicle) ?? presenceStatus(vehicleByTripId.get(trip.tripId));
         const arrivalTime = stu.arrival ? toNumber(stu.arrival.time) : null;
 
         matched.push({

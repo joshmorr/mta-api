@@ -105,7 +105,8 @@ export const ArrivalSchema = z.object({
   trip_id: z.string(),
   arrival_time: z.number().nullable().openapi({ description: 'Unix timestamp of arrival, or null for departure-only updates' }),
   arrival_in_seconds: z.number().nullable(),
-  status: z.enum(['INCOMING_AT', 'STOPPED_AT', 'IN_TRANSIT_TO']),
+  status: z.enum(['INCOMING_AT', 'STOPPED_AT', 'IN_TRANSIT_TO']).nullable()
+    .openapi({ description: 'Vehicle status, or null if this feed doesn\'t publish it for this trip' }),
 }).openapi('Arrival');
 
 export const ArrivalResponseSchema = z.object({

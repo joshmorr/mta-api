@@ -291,11 +291,14 @@
           },
           "status": {
             "type": "string",
+            "nullable": true,
             "enum": [
               "INCOMING_AT",
               "STOPPED_AT",
-              "IN_TRANSIT_TO"
-            ]
+              "IN_TRANSIT_TO",
+              null
+            ],
+            "description": "Vehicle status, or null if this feed doesn't publish it for this trip"
           }
         },
         "required": [

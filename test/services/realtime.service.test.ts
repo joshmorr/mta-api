@@ -272,7 +272,7 @@ describe('getArrivalsForStop', () => {
     expect(result.arrivals.map((a) => a.route_id)).toEqual(['1']);
   });
 
-  it('defaults vehicle status to IN_TRANSIT_TO when no matching vehicle entity', async () => {
+  it('leaves status null when no matching vehicle entity publishes one', async () => {
     const now = pinClockToMonday();
     const body = await encodeFeedMessage({
       header: { gtfsRealtimeVersion: '2.0', timestamp: now },
@@ -289,7 +289,63 @@ describe('getArrivalsForStop', () => {
     stubFetchWith(body);
 
     const result = await getArrivalsForStop('127', 10, 'subway');
-    expect(result.arrivals[0].status).toBe('IN_TRANSIT_TO');
+    expect(result.arrivals[0].status).toBeNull();
+  });
+
+  it('leaves status null when the matched vehicle entity has no currentStatus on the wire', async () => {
+    // current_status defaults to IN_TRANSIT_TO in proto2 - protobufjs can't
+    // tell "published as in-transit" from "not published at all" unless the
+    // field is actually absent from the encoded message.
+    const now = pinClockToMonday();
+    const body = await encodeFeedMessage({
+      header: { gtfsRealtimeVersion: '2.0', timestamp: now },
+      entity: [
+        {
+          id: 't1',
+          tripUpdate: {
+            trip: { tripId: 'T1', routeId: '1' },
+            stopTimeUpdate: [{ stopId: '127N', arrival: { time: now + 60 } }],
+          },
+        },
+        {
+          id: 'v1',
+          vehicle: { trip: { tripId: 'T1', routeId: '1' }, timestamp: now },
+        },
+      ],
+    });
+    stubFetchWith(body);
+
+    const result = await getArrivalsForStop('127', 10, 'subway');
+    expect(result.arrivals[0].status).toBeNull();
+  });
+
+  it('reads status from the same entity when tripUpdate and vehicle are attached together (MNR shape)', async () => {
+    // MNR carries tripUpdate and vehicle on the SAME entity, and its
+    // vehicle.trip.tripId never matches the tripUpdate's trip id - so a
+    // cross-entity map lookup alone misses it. The same-entity check must
+    // run first.
+    const now = pinClockToMonday();
+    const body = await encodeFeedMessage({
+      header: { gtfsRealtimeVersion: '2.0', timestamp: now },
+      entity: [
+        {
+          id: 't1',
+          tripUpdate: {
+            trip: { tripId: 'T1', routeId: '1' },
+            stopTimeUpdate: [{ stopId: '127N', arrival: { time: now + 60 } }],
+          },
+          vehicle: {
+            trip: { tripId: 'does-not-match-tripUpdate-id', routeId: '1' },
+            currentStatus: 0 as never, // INCOMING_AT
+            timestamp: now,
+          },
+        },
+      ],
+    });
+    stubFetchWith(body);
+
+    const result = await getArrivalsForStop('127', 10, 'subway');
+    expect(result.arrivals[0].status).toBe('INCOMING_AT');
   });
 
   it('throws NotFoundError when stop does not exist', async () => {
