@@ -5,8 +5,6 @@ import type { ArrivalResponse, Arrival, VehicleResponse } from '../types/api';
 import {
   getChildPlatformIds,
   getServedRouteIdsByStopIds,
-  type ServiceDateFilter,
-  type WeekdayColumn,
   getStopNameById,
   isPlatformStop,
 } from '../db/queries/realtimeFeed';
@@ -14,6 +12,7 @@ import { findRoutesById, getRoutesByIds } from '../db/queries/routes';
 import { toRouteNames } from './routes.service';
 import { findStopsById, getParentId, getStopNamesByIds } from '../db/queries/stops';
 import { toNumber } from '../utils/realtime';
+import { getRelevantServiceDates } from '../utils/serviceDate';
 
 // VehicleStopStatus is a proto enum; protobufjs decodes it as an int.
 // Map back to the string union our API contract returns.
@@ -353,63 +352,4 @@ export class NotFoundError extends Error {
     super(message);
     this.name = 'NotFoundError';
   }
-}
-
-export function getRelevantServiceDates(now: Date = new Date()): ServiceDateFilter[] {
-  const current = getNyDateParts(now);
-  const serviceDates: ServiceDateFilter[] = [
-    {
-      date: current.date,
-      weekdayColumn: current.weekdayColumn,
-    },
-  ];
-
-  // GTFS service days often extend past midnight via 24+ hour stop_times.
-  if (current.hour < 5) {
-    const previous = getNyDateParts(new Date(now.getTime() - 24 * 60 * 60 * 1000));
-    if (previous.date !== current.date) {
-      serviceDates.push({
-        date: previous.date,
-        weekdayColumn: previous.weekdayColumn,
-      });
-    }
-  }
-
-  return serviceDates;
-}
-
-export function getNyDateParts(date: Date): {
-  date: string;
-  weekdayColumn: WeekdayColumn;
-  hour: number;
-} {
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone: 'America/New_York',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    hourCycle: 'h23',
-    weekday: 'long',
-  }).formatToParts(date);
-
-  const year = getDatePart(parts, 'year');
-  const month = getDatePart(parts, 'month');
-  const day = getDatePart(parts, 'day');
-  const hour = Number(getDatePart(parts, 'hour'));
-  const weekday = getDatePart(parts, 'weekday').toLowerCase() as WeekdayColumn;
-
-  return {
-    date: `${year}${month}${day}`,
-    weekdayColumn: weekday,
-    hour,
-  };
-}
-
-function getDatePart(parts: Intl.DateTimeFormatPart[], type: Intl.DateTimeFormatPartTypes): string {
-  const part = parts.find((entry) => entry.type === type);
-  if (!part) {
-    throw new Error(`Missing date part: ${type}`);
-  }
-  return part.value;
 }

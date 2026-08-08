@@ -9,7 +9,8 @@ import type {
   GtfsTransfer,
   GtfsTrip,
 } from '../../types/gtfs';
-import { toGtfsSeconds, toIntOrNull } from '../../utils/gtfsParse';
+import { toIntOrNull } from '../../utils/gtfsParse';
+import { toGtfsSeconds } from '../../utils/serviceDate';
 
 const BATCH_SIZE = 1000;
 

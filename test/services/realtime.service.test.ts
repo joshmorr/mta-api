@@ -1,9 +1,8 @@
 import { describe, expect, it, mock, beforeEach, afterEach, afterAll } from 'bun:test';
 import * as protobuf from 'protobufjs';
 import { join } from 'path';
+import { getNyDateParts, getRelevantServiceDates } from '../../src/utils/serviceDate';
 import {
-  getNyDateParts,
-  getRelevantServiceDates,
   getArrivalsForStop,
   getVehiclesForRoute,
   NotFoundError,
