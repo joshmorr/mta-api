@@ -11,6 +11,7 @@ bun install          # install dependencies
 bun run dev          # start with hot reload (auto-seeds DB if empty)
 bun run start        # start without hot reload
 bun run seed         # download + import all GTFS static feeds (~2-3 min)
+bun run mcp          # MCP server over stdio (JSON-RPC on stdin/stdout)
 bun run build        # bundle to dist/
 bun run openapi:dump # regenerate committed openapi.json (run after route/schema changes)
 bun run lint         # oxlint
@@ -58,13 +59,35 @@ The MTA has overlapping IDs across subway/LIRR/MNR (e.g. `stop_id=1` exists in a
 
 Subway routes map to specific RT feed paths (e.g. A/C/E → `nyct/gtfs-ace`). This mapping lives in `src/services/feed.service.ts` as `SUBWAY_ROUTE_TO_FEED`. LIRR and MNR each have a single feed path.
 
+### Services are the shared layer
+
+`src/services/` holds the business logic, and there are two presentations of it: the HTTP routers in `src/routes/` and the MCP tools in `src/mcp/`. Neither calls the other and neither goes over the network. A handler validates, calls a service, and wraps the result in its own envelope; services return data or `null` and throw, and know nothing about HTTP or MCP.
+
+Put new logic in a service, not in a handler — a handler-only implementation is invisible to the MCP tools, which is exactly the state stops/routes/alerts were in before `src/mcp/` existed.
+
+### MCP server
+
+`src/mcp/tools.ts` registers seven read-only tools (the API's entity endpoints minus `/health`) via `registerMtaTools()`. `src/mcp/server.ts` exports the `buildMcpServer()` factory, used by both transports:
+
+- **stdio** — `src/mcp/stdio.ts`, wired as the `mta-mcp` bin and `bun run mcp`. A client launches it as a subprocess.
+- **HTTP** — `POST /mcp` in `src/index.ts`, via the SDK's web-standard fetch face (`createMcpHandler(...).fetch` takes a `Request` and returns a `Response`, so it drops straight into Hono).
+
+Constraints worth knowing before editing:
+
+- **`src/mcp/stdio.ts` must not import `src/index.ts`.** That runs `startup()` as an import side effect, which calls `process.exit(1)` on an empty DB — a tool client would just see the subprocess die. It runs `runMigrations()` itself and treats an empty DB as a stderr warning.
+- **Nothing may write to stdout** on the stdio path; that is the JSON-RPC channel. Log to stderr.
+- Tool *input* schemas live in `src/mcp/schemas.ts` and are written fresh — the request schemas in `src/schemas/api.ts` are full of `z.coerce` for query-string parsing, which would wrongly accept a string where MCP delivers a typed number. Response schemas *are* reused from `src/schemas/api.ts` as `outputSchema`.
+- `src/schemas/api.ts` must import `z` from `@hono/zod-openapi`, not from `zod`. `.openapi()` is patched onto the prototype by that package; importing `zod` directly only works if some other module imported `@hono/zod-openapi` first.
+- The MCP endpoint is deliberately absent from `openapi.json` — `/doc` describes the REST surface, and MCP clients discover capabilities by handshake. Adding a tool does not require `bun run openapi:dump`.
+
 ### Key patterns
 
 - Routes use `OpenAPIHono` + `createRoute()` with Zod schemas in `src/schemas/api.ts`. Response types in `src/types/api.ts` are the original TypeScript interfaces (still used by services). Status codes in handlers must use `as const` (e.g. `c.json(data, 200 as const)`) for type narrowing.
 - OpenAPI spec served at `GET /doc`, Swagger UI at `GET /ui`. The doc metadata lives in `src/openapi.ts` (`openApiDocConfig`), shared by `index.ts` and the static dump. `bun run openapi:dump` writes the committed `openapi.json` (the codegen artifact) via `buildOpenApiDocument()`, which mounts the routers without booting the server and normalizes Hono `:param` path keys to OpenAPI `{param}`. Regenerate it after any route or schema change.
 - Subway stops have a parent/platform hierarchy (parent station → N/S platforms). LIRR and MNR use a flat stop model.
 - Tests use `bun:test` and live in `test/`, mirroring the source structure. `bunfig.toml` preloads `test/setup.ts` before every test run — it sets `DB_PATH=:memory:` and runs migrations so tests never touch the real DB.
-- Test helpers: `test/helpers/seed.ts` exports `resetDb()`, `seedSubway()`, `seedLirr()`, `seedMnr()` for fixture setup. `test/helpers/app.ts` exports `makeTestApp(router, mountPath)` to mount a single router for isolated route tests.
+- Test helpers: `test/helpers/seed.ts` exports `resetDb()`, `seedSubway()`, `seedLirr()`, `seedMnr()` for fixture setup. `test/helpers/app.ts` exports `makeTestApp(router, mountPath)` to mount a single router for isolated route tests. `test/helpers/mcp.ts` exports `makeMcpClient()`, a JSON-RPC client over the MCP handler — build one per test file and close it in `afterAll`, since bun runs every file in one process and a shared handler gets closed out from under files that haven't finished.
+- The RT cache (`src/cache/rtCache.ts`) is module-level and shared across every test file in a run, and entries expire against `Date.now`. Suites that stub the clock pin it to offsets from a common base, so a file that leaves an entry at a later offset poisons any file that pins earlier — that entry still looks fresh. Call `__resetRtCacheForTests()` in `beforeEach`/`afterAll` rather than relying on ever-increasing offsets.
 - The `data/` directory (SQLite DB) is gitignored and created automatically on first run.
 
 ### Adding schema changes

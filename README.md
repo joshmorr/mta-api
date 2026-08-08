@@ -2,7 +2,9 @@
 
 A REST API over the MTA's static and realtime GTFS feeds. Handles protobuf parsing, feed routing, ZIP extraction, schedule-aware filtering, and stop lookups. Clients receive plain JSON with no knowledge of the underlying MTA feed structure.
 
-**Stack:** [Bun](https://bun.sh) · [Hono](https://hono.dev) · `bun:sqlite` · `protobufjs`  
+The same data is also served as [MCP](#mcp-server) tools over stdio or HTTP, so LLM agents can query it directly.
+
+**Stack:** [Bun](https://bun.sh) · [Hono](https://hono.dev) · `bun:sqlite` · `protobufjs` · [`@modelcontextprotocol/sdk`](https://modelcontextprotocol.io)  
 **No external database. No required API keys.**
 
 ---
@@ -357,6 +359,70 @@ API status and per-feed static data counts, read from an in-memory cache refresh
   }
 }
 ```
+
+---
+
+## MCP server
+
+The same data is exposed as [Model Context Protocol](https://modelcontextprotocol.io) tools, so an LLM agent — Claude Code, Claude Desktop, or any MCP client — can query MTA schedules and realtime feeds directly.
+
+Tools call the service layer in process. They are not a client of the REST API and take no network hop, so everything below works exactly as the HTTP endpoints do.
+
+### Connecting
+
+**Locally, over stdio.** The client launches the server as a subprocess; nothing needs to be running first. Requires a seeded database (`bun run seed`).
+
+```json
+{
+  "mcpServers": {
+    "mta": {
+      "command": "bun",
+      "args": ["run", "/absolute/path/to/mta-api/src/mcp/stdio.ts"]
+    }
+  }
+}
+```
+
+Put that in `.mcp.json` (Claude Code) or `claude_desktop_config.json` (Claude Desktop). This repo already ships a [`.mcp.json`](./.mcp.json), so the tools are available when working in it. To check the server by hand:
+
+```sh
+bun run mcp   # speaks JSON-RPC on stdin/stdout; ^D to exit
+```
+
+**Remotely, over HTTP.** The running server serves streamable HTTP at `POST /mcp`, so a deployed instance is connectable with no local checkout:
+
+```json
+{
+  "mcpServers": {
+    "mta": { "url": "http://localhost:3000/mcp" }
+  }
+}
+```
+
+Either transport can be inspected with the official tool:
+
+```sh
+npx @modelcontextprotocol/inspector          # then point it at http://localhost:3000/mcp
+npx @modelcontextprotocol/inspector bun run src/mcp/stdio.ts
+```
+
+### Tools
+
+All seven are read-only and non-destructive.
+
+| Tool | Returns | Live feed |
+|------|---------|:---:|
+| `mta_search_stops` | Stops by name, by proximity, or unfiltered | |
+| `mta_get_stop` | One stop with its platforms and their directions | |
+| `mta_list_routes` | All routes, optionally for one system | |
+| `mta_get_route` | One route's names and colour | |
+| `mta_get_arrivals` | Upcoming arrivals at a stop, soonest first | ✅ |
+| `mta_get_vehicles` | Trains currently active on a route | ✅ |
+| `mta_get_alerts` | Active service alerts, filterable by route or stop | ✅ |
+
+The [feed scoping](#feed-scoping) rule applies: `mta_get_stop`, `mta_get_route`, `mta_get_arrivals`, and `mta_get_vehicles` all require `feed`, and each tool's description explains why. `mta_get_alerts` is the exception — alerts for all three systems arrive on one upstream feed, so it filters by route or stop instead.
+
+Realtime tools degrade the way the HTTP endpoints do: when an upstream feed cannot be reached, cached data is returned with `stale: true` and a `feed_error`, rather than the call failing.
 
 ---
 

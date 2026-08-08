@@ -8,6 +8,8 @@ import { stopsRouter, routesRouter, arrivalsRouter, vehiclesRouter, alertsRouter
 import { rateLimit } from './middleware/rateLimit';
 import { cacheHeaders } from './middleware/cacheHeaders';
 import { openApiDocConfig, normalizeOpenApiPaths } from './openapi';
+import { createMcpHandler } from '@modelcontextprotocol/server';
+import { buildMcpServer } from './mcp/server';
 
 const app = new OpenAPIHono();
 
@@ -36,6 +38,14 @@ app.route('/health', healthRouter);
 app.get('/doc', (c) => c.json(normalizeOpenApiPaths(app.getOpenAPIDocument(openApiDocConfig))));
 
 app.get('/ui', swaggerUI({ url: '/doc' }));
+
+// MCP over streamable HTTP, serving the same tools as the stdio entrypoint.
+// Deliberately outside the OpenAPI document: /doc describes the REST surface,
+// and an MCP client discovers this endpoint's capabilities by handshake.
+const mcp = createMcpHandler(buildMcpServer, {
+  onerror: (err) => console.error('[mcp]', err),
+});
+app.all('/mcp', (c) => mcp.fetch(c.req.raw));
 
 startup()
   .then(() => console.error(`[startup] Server listening on http://${config.host}:${config.port}`))

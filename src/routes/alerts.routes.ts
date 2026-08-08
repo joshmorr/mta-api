@@ -1,5 +1,5 @@
 import { createRoute, z } from '@hono/zod-openapi';
-import { fetchAlerts } from '../services/alerts.service';
+import { getAlerts, parseDirection } from '../services/alerts.service';
 import { createApiRouter } from '../utils/openapi';
 import { AlertListResponseSchema, ErrorSchema } from '../schemas/api';
 
@@ -30,39 +30,22 @@ const getAlertsRoute = createRoute({
 
 alertsRouter.openapi(getAlertsRoute, async (c) => {
   const { routes: routesParam, stop_id: stopId, direction: dirParam } = c.req.valid('query');
-  const routeFilter = routesParam
+  const routes = routesParam
     ? routesParam.split(',').map((r) => r.trim()).filter(Boolean)
-    : undefined;
-  const directionFilter: 0 | 1 | undefined =
-    dirParam === 'N' || dirParam === '0' ? 0
-    : dirParam === 'S' || dirParam === '1' ? 1
     : undefined;
 
   try {
-    const { generated_at, stale, feed_error, alerts } = await fetchAlerts();
-
-    let filtered = alerts;
-    if (routeFilter) {
-      filtered = filtered.filter((a) =>
-        a.informed_entities.some((ie) => ie.route_id && routeFilter.includes(ie.route_id))
-      );
-    }
-    if (stopId) {
-      // Per §5.2: evaluate each informed_entity independently. An entry with
-      // stop_id and no direction_id means both directions are affected.
-      filtered = filtered.filter((a) =>
-        a.informed_entities.some((ie) =>
-          ie.stop_id === stopId &&
-          (directionFilter === undefined || ie.direction_id === undefined || ie.direction_id === directionFilter)
-        )
-      );
-    }
+    const { generated_at, stale, feed_error, alerts } = await getAlerts({
+      routes,
+      stopId,
+      direction: parseDirection(dirParam),
+    });
 
     return c.json({
       generated_at,
       stale,
       ...(feed_error ? { feed_error } : {}),
-      alerts: filtered,
+      alerts,
     }, 200 as const);
   } catch {
     return c.json({ error: 'Alerts feed unavailable', code: 'FEED_ERROR' }, 503 as const);

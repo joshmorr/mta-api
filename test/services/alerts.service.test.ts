@@ -2,7 +2,7 @@ import { describe, expect, it, mock, afterEach, afterAll } from 'bun:test';
 import * as protobuf from 'protobufjs';
 import { join } from 'path';
 import type { FeedMessage } from '../../src/types/gtfs';
-import { fetchAlerts } from '../../src/services/alerts.service';
+import { fetchAlerts, getAlerts, parseDirection } from '../../src/services/alerts.service';
 
 // Stub globalThis.fetch with a real protobuf payload so the alerts service runs
 // against the real cache module. (Mocking '../../src/cache/rtCache' via mock.module
@@ -161,5 +161,123 @@ describe('fetchAlerts', () => {
     expect(result.alerts[0].id).toBe('a');
     expect(result.alerts[0].header).toBe('L disruption');
     expect(result.alerts[0].informed_entities).toEqual([{ route_id: 'L' }]);
+  });
+});
+
+describe('parseDirection', () => {
+  it('maps both the N/S aliases and the raw GTFS values', () => {
+    expect(parseDirection('N')).toBe(0);
+    expect(parseDirection('0')).toBe(0);
+    expect(parseDirection('S')).toBe(1);
+    expect(parseDirection('1')).toBe(1);
+  });
+
+  it('returns undefined when no direction is given', () => {
+    expect(parseDirection(undefined)).toBeUndefined();
+  });
+});
+
+describe('getAlerts', () => {
+  /**
+   * Three alerts:
+   *   a-route-only  — route A, no stop
+   *   a-northbound  — route A at stop 101, direction 0 only
+   *   a-bothways    — route B at stop 101, no direction (both directions)
+   */
+  async function stubAlertFeed() {
+    const body = await encodeFeedMessage({
+      header: { gtfsRealtimeVersion: '2.0', timestamp: 1_700_000_100 },
+      entity: [
+        {
+          id: 'a-route-only',
+          alert: {
+            activePeriod: [],
+            informedEntity: [{ routeId: 'A' }],
+            headerText: { translation: [{ text: 'A delays', language: 'en' }] },
+          },
+        },
+        {
+          id: 'a-northbound',
+          alert: {
+            activePeriod: [],
+            informedEntity: [{ routeId: 'A', stopId: '101', directionId: 0 }],
+            headerText: { translation: [{ text: 'A northbound bypass', language: 'en' }] },
+          },
+        },
+        {
+          id: 'a-bothways',
+          alert: {
+            activePeriod: [],
+            informedEntity: [{ routeId: 'B', stopId: '101' }],
+            headerText: { translation: [{ text: 'B elevator out', language: 'en' }] },
+          },
+        },
+      ],
+    });
+    stubFetch(body);
+    advanceClock();
+  }
+
+  it('returns everything when no filter is given', async () => {
+    await stubAlertFeed();
+    const { alerts } = await getAlerts();
+    expect(alerts.map((a) => a.id)).toEqual(['a-route-only', 'a-northbound', 'a-bothways']);
+  });
+
+  it('passes through the feed metadata', async () => {
+    await stubAlertFeed();
+    const result = await getAlerts();
+    expect(result.generated_at).toBe(1_700_000_100);
+    expect(result.stale).toBe(false);
+  });
+
+  it('filters by route', async () => {
+    await stubAlertFeed();
+    const { alerts } = await getAlerts({ routes: ['A'] });
+    expect(alerts.map((a) => a.id)).toEqual(['a-route-only', 'a-northbound']);
+  });
+
+  it('accepts several routes at once', async () => {
+    await stubAlertFeed();
+    const { alerts } = await getAlerts({ routes: ['B', 'Z'] });
+    expect(alerts.map((a) => a.id)).toEqual(['a-bothways']);
+  });
+
+  it('filters by stop, dropping alerts that name no stop', async () => {
+    await stubAlertFeed();
+    const { alerts } = await getAlerts({ stopId: '101' });
+    expect(alerts.map((a) => a.id)).toEqual(['a-northbound', 'a-bothways']);
+  });
+
+  it('keeps direction-less entries when a direction is requested', async () => {
+    await stubAlertFeed();
+    // a-northbound is direction 0 so it drops out; a-bothways names no
+    // direction, which per §5.2 means both are affected.
+    const { alerts } = await getAlerts({ stopId: '101', direction: 1 });
+    expect(alerts.map((a) => a.id)).toEqual(['a-bothways']);
+  });
+
+  it('matches the requested direction', async () => {
+    await stubAlertFeed();
+    const { alerts } = await getAlerts({ stopId: '101', direction: 0 });
+    expect(alerts.map((a) => a.id)).toEqual(['a-northbound', 'a-bothways']);
+  });
+
+  it('ignores direction when no stop is given', async () => {
+    await stubAlertFeed();
+    const { alerts } = await getAlerts({ direction: 1 });
+    expect(alerts).toHaveLength(3);
+  });
+
+  it('combines route and stop filters', async () => {
+    await stubAlertFeed();
+    const { alerts } = await getAlerts({ routes: ['A'], stopId: '101' });
+    expect(alerts.map((a) => a.id)).toEqual(['a-northbound']);
+  });
+
+  it('returns an empty list when nothing matches', async () => {
+    await stubAlertFeed();
+    const { alerts } = await getAlerts({ routes: ['NOPE'] });
+    expect(alerts).toEqual([]);
   });
 });

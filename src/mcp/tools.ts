@@ -1,0 +1,248 @@
+import type { McpServer } from '@modelcontextprotocol/server';
+import { searchStops, getStopDetail } from '../services/stops.service';
+import { listRoutes, getRoute } from '../services/routes.service';
+import { getAlerts, parseDirection } from '../services/alerts.service';
+import { getArrivalsForStop, getVehiclesForRoute, NotFoundError } from '../services/realtime.service';
+import {
+  StopListResponseSchema,
+  StopDetailSchema,
+  RouteListResponseSchema,
+  RouteResponseSchema,
+  ArrivalResponseSchema,
+  VehicleListResponseSchema,
+} from '../schemas/api';
+import {
+  SearchStopsInput,
+  GetStopInput,
+  ListRoutesInput,
+  GetRouteInput,
+  GetArrivalsInput,
+  GetVehiclesInput,
+  GetAlertsInput,
+  AlertToolOutput,
+} from './schemas';
+
+/** Static-schedule tools read the local SQLite snapshot; nothing leaves the process. */
+const STATIC = {
+  readOnlyHint: true,
+  destructiveHint: false,
+  idempotentHint: true,
+  openWorldHint: false,
+} as const;
+
+/** Realtime tools fetch live GTFS-RT feeds from the MTA. */
+const REALTIME = { ...STATIC, openWorldHint: true } as const;
+
+const FEED_NOTE =
+  'The MTA reuses IDs across systems, so `feed` selects which one: "subway", ' +
+  '"lirr" (Long Island Rail Road), or "mnr" (Metro-North Railroad).';
+
+function ok<T>(structuredContent: T) {
+  return {
+    content: [{ type: 'text' as const, text: JSON.stringify(structuredContent, null, 2) }],
+    structuredContent: structuredContent as Record<string, unknown>,
+  };
+}
+
+function fail(text: string) {
+  return { isError: true, content: [{ type: 'text' as const, text }] };
+}
+
+/**
+ * Turn a thrown service error into a tool error the agent can act on.
+ *
+ * NotFoundError is the common case and almost always means the caller guessed
+ * an ID or picked the wrong feed, so the message says which lookup tool to
+ * reach for next rather than just restating the failure.
+ */
+function toToolError(err: unknown, hint: string) {
+  if (err instanceof NotFoundError) return fail(`${err.message}. ${hint}`);
+  const message = err instanceof Error ? err.message : String(err);
+  return fail(`Upstream realtime feed unavailable: ${message}. The MTA feed may be down; retry shortly.`);
+}
+
+export function registerMtaTools(server: McpServer): void {
+  server.registerTool(
+    'mta_search_stops',
+    {
+      title: 'Search MTA stops',
+      description:
+        'Find MTA stops (stations) by name, by proximity to a coordinate, or unfiltered. ' +
+        `Returns each stop's ID, name, coordinates, and — for the subway — its platform IDs. ${FEED_NOTE}\n\n` +
+        'This is the entry point for most questions: other tools take a stop_id, and this is how you get one. ' +
+        'Subway results are always parent stations, never individual platforms.\n\n' +
+        'Give `q` for a name search, or `lat`+`lon` for a proximity search. If both are given, proximity wins. ' +
+        'Give neither to page through every stop.',
+      inputSchema: SearchStopsInput,
+      outputSchema: StopListResponseSchema,
+      annotations: STATIC,
+    },
+    async ({ q, lat, lon, feed, radius, limit }) => {
+      if ((lat === undefined) !== (lon === undefined)) {
+        return fail('A proximity search needs both lat and lon. Provide both, or use q for a name search.');
+      }
+      const stops = searchStops({ q, lat, lon, feed, radius, limit });
+      if (stops.length === 0) {
+        return fail(
+          q
+            ? `No stops match "${q}"${feed ? ` in the ${feed} feed` : ''}. Try a shorter substring — matching is on the stop name, so "42 St" beats "42nd Street".`
+            : 'No stops found. Try widening the radius or dropping the feed filter.',
+        );
+      }
+      return ok({ stops });
+    },
+  );
+
+  server.registerTool(
+    'mta_get_stop',
+    {
+      title: 'Get an MTA stop',
+      description:
+        'Full detail for one stop: name, coordinates, and its platforms with the direction each serves. ' +
+        `${FEED_NOTE}\n\n` +
+        'Subway stops are hierarchical — passing a platform ID such as "127N" returns its parent station "127" ' +
+        'with every platform listed. LIRR and Metro-North stops are flat and have no platforms.\n\n' +
+        'Use mta_search_stops first if you have a station name rather than an ID.',
+      inputSchema: GetStopInput,
+      outputSchema: StopDetailSchema,
+      annotations: STATIC,
+    },
+    async ({ stop_id, feed }) => {
+      const stop = getStopDetail(stop_id, feed);
+      if (!stop) {
+        return fail(
+          `No stop "${stop_id}" in the ${feed} feed. The same ID may exist in another feed — ` +
+          'check the others, or use mta_search_stops to find the right ID by name.',
+        );
+      }
+      return ok(stop);
+    },
+  );
+
+  server.registerTool(
+    'mta_list_routes',
+    {
+      title: 'List MTA routes',
+      description:
+        'Every route (subway line or commuter-rail branch), optionally restricted to one system. ' +
+        `${FEED_NOTE}\n\n` +
+        'Returns route ID, short and long name, and the official hex colour. Subway route IDs are the ' +
+        'familiar single characters ("A", "7", "L"); LIRR and Metro-North use branch codes ("PW", "HUDSON").\n\n' +
+        'The full list is small — use this to discover valid route IDs for mta_get_vehicles or mta_get_alerts.',
+      inputSchema: ListRoutesInput,
+      outputSchema: RouteListResponseSchema,
+      annotations: STATIC,
+    },
+    async ({ feed }) => ok({ routes: listRoutes(feed) }),
+  );
+
+  server.registerTool(
+    'mta_get_route',
+    {
+      title: 'Get an MTA route',
+      description:
+        `Detail for one route: its names and official colour. ${FEED_NOTE}\n\n` +
+        'Use mta_list_routes to discover valid route IDs.',
+      inputSchema: GetRouteInput,
+      outputSchema: RouteResponseSchema,
+      annotations: STATIC,
+    },
+    async ({ route_id, feed }) => {
+      const route = getRoute(route_id, feed);
+      if (!route) {
+        return fail(
+          `No route "${route_id}" in the ${feed} feed. Use mta_list_routes to see the valid IDs for that feed.`,
+        );
+      }
+      return ok(route);
+    },
+  );
+
+  server.registerTool(
+    'mta_get_arrivals',
+    {
+      title: 'Get upcoming MTA arrivals',
+      description:
+        'Live upcoming arrivals at a stop, soonest first, from the realtime GTFS-RT feeds. ' +
+        `${FEED_NOTE}\n\n` +
+        'Each arrival gives the route, trip ID, a Unix arrival timestamp, seconds until arrival, and ' +
+        'whether the train is approaching, stopped, or in transit. Pass a parent station ID to cover ' +
+        'every platform, or a specific platform ID for one direction.\n\n' +
+        'Answers "when is the next train". Use mta_search_stops first to turn a station name into an ID.\n\n' +
+        'The response carries `stale: true` when the upstream feed could not be reached and cached data ' +
+        'was served instead, with `feed_error` explaining why. Data is cached for about 10 seconds, so ' +
+        'calling repeatedly in quick succession returns the same result.',
+      inputSchema: GetArrivalsInput,
+      outputSchema: ArrivalResponseSchema,
+      annotations: REALTIME,
+    },
+    async ({ stop, feed, limit, routes }) => {
+      try {
+        return ok(await getArrivalsForStop(stop, limit, feed, routes));
+      } catch (err) {
+        return toToolError(err, `Check the stop exists in the ${feed} feed with mta_search_stops.`);
+      }
+    },
+  );
+
+  server.registerTool(
+    'mta_get_vehicles',
+    {
+      title: 'Get active MTA vehicles',
+      description:
+        'Every train currently active on a route, with its trip ID, the stop it is approaching or ' +
+        `stopped at, and a Unix timestamp for the position. ${FEED_NOTE}\n\n` +
+        'Answers "how many trains are running" or "where are they right now". For arrivals at a ' +
+        'particular station use mta_get_arrivals instead — this is the whole-line view.\n\n' +
+        'Use mta_list_routes to discover valid route IDs.',
+      inputSchema: GetVehiclesInput,
+      outputSchema: VehicleListResponseSchema,
+      annotations: REALTIME,
+    },
+    async ({ route, feed }) => {
+      try {
+        return ok(await getVehiclesForRoute(route, feed));
+      } catch (err) {
+        return toToolError(err, `Check the route exists in the ${feed} feed with mta_list_routes.`);
+      }
+    },
+  );
+
+  server.registerTool(
+    'mta_get_alerts',
+    {
+      title: 'Get MTA service alerts',
+      description:
+        'Active service alerts — delays, planned work, reroutes, elevator outages — across all three ' +
+        'systems, optionally narrowed to specific routes or a stop.\n\n' +
+        'Each alert carries a header, a description, the active periods it applies to, and the ' +
+        '(route, stop, direction) selectors it names. Unlike the other tools this one is not ' +
+        'feed-scoped: alerts for all three systems come from a single upstream feed and are returned ' +
+        'together, so filter by route or stop instead.\n\n' +
+        'Answers "is anything wrong with the L train" or "why is my train delayed".\n\n' +
+        'Alert descriptions are long. Narrow with `routes` or `stop_id` rather than raising `limit`; ' +
+        'the response sets `truncated: true` and `total_matched` when `limit` dropped matching alerts.',
+      inputSchema: GetAlertsInput,
+      outputSchema: AlertToolOutput,
+      annotations: REALTIME,
+    },
+    async ({ routes, stop_id, direction, limit }) => {
+      try {
+        const result = await getAlerts({
+          routes,
+          stopId: stop_id,
+          direction: parseDirection(direction),
+        });
+        const total = result.alerts.length;
+        const alerts = result.alerts.slice(0, limit);
+        return ok({
+          ...result,
+          alerts,
+          ...(total > alerts.length ? { truncated: true, total_matched: total } : {}),
+        });
+      } catch (err) {
+        return toToolError(err, 'The alerts feed is upstream of this server.');
+      }
+    },
+  );
+}
