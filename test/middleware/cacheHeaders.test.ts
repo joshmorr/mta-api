@@ -8,6 +8,8 @@ function makeApp() {
   app.get('/arrivals', (c) => c.json({ ok: true }));
   app.get('/stops', (c) => c.json({ ok: true }));
   app.get('/stops/:id', (c) => c.json({ ok: true }));
+  app.get('/schedule', (c) => c.json({ ok: true }));
+  app.get('/trips/:id', (c) => c.json({ ok: true }));
   app.get('/health', (c) => c.json({ ok: true }));
   app.get('/boom', (c) => c.json({ error: 'x' }, 503));
   app.post('/arrivals', (c) => c.json({ ok: true }));
@@ -20,10 +22,20 @@ describe('cacheHeaders middleware', () => {
     expect(res.headers.get('Cache-Control')).toBe('public, max-age=5, stale-while-revalidate=20');
   });
 
+  it('sets a short cache on /schedule too - static data, but "now"-relative by default', async () => {
+    const res = await makeApp().request('/schedule');
+    expect(res.headers.get('Cache-Control')).toBe('public, max-age=5, stale-while-revalidate=20');
+  });
+
   it('sets a long cache on static GETs, including subpaths', async () => {
     const expected = 'public, max-age=3600, stale-while-revalidate=86400';
     expect((await makeApp().request('/stops')).headers.get('Cache-Control')).toBe(expected);
     expect((await makeApp().request('/stops/127')).headers.get('Cache-Control')).toBe(expected);
+  });
+
+  it('sets a long cache on /trips/:id - deterministic per (trip_id, date)', async () => {
+    const expected = 'public, max-age=3600, stale-while-revalidate=86400';
+    expect((await makeApp().request('/trips/GO201_26_2701')).headers.get('Cache-Control')).toBe(expected);
   });
 
   it('does not cache unmapped paths like /health', async () => {

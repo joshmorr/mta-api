@@ -4,7 +4,16 @@ import { logger } from 'hono/logger';
 import { timing } from 'hono/timing';
 import { config } from './config';
 import { startup } from './startup';
-import { stopsRouter, routesRouter, arrivalsRouter, vehiclesRouter, alertsRouter, healthRouter } from './routes';
+import {
+  stopsRouter,
+  routesRouter,
+  arrivalsRouter,
+  vehiclesRouter,
+  alertsRouter,
+  healthRouter,
+  scheduleRouter,
+  tripsRouter,
+} from './routes';
 import { rateLimit } from './middleware/rateLimit';
 import { cacheHeaders } from './middleware/cacheHeaders';
 import { openApiDocConfig, normalizeOpenApiPaths } from './openapi';
@@ -31,6 +40,8 @@ app.route('/arrivals', arrivalsRouter);
 app.route('/vehicles', vehiclesRouter);
 app.route('/alerts', alertsRouter);
 app.route('/health', healthRouter);
+app.route('/schedule', scheduleRouter);
+app.route('/trips', tripsRouter);
 
 // Serve the spec with Hono `:param` path keys normalized to OpenAPI `{param}`,
 // so the live endpoint matches the committed `openapi.json` and codegen tools

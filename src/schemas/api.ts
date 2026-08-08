@@ -197,6 +197,98 @@ export const AlertListResponseSchema = z.object({
   alerts: z.array(AlertSchema),
 }).openapi('AlertListResponse');
 
+// --- Schedule (static timetable) ---
+
+export const ScheduledDepartureDestinationSchema = z.object({
+  stop_id: z.string(),
+  stop_name: z.string(),
+  stop_sequence: z.number().int(),
+  arrival_time: z.string().nullable(),
+  arrival_timestamp: z.number().nullable(),
+  duration_seconds: z.number().nullable().openapi({ description: 'Seconds between this departure and the arrival at `to`.' }),
+}).openapi('ScheduledDepartureDestination');
+
+export const ScheduledDepartureSchema = z.object({
+  feed_id: FeedTypeSchema,
+  trip_id: z.string(),
+  route_id: RouteIdField,
+  route_name: RouteNameField,
+  route_long_name: RouteLongNameField,
+  service_id: z.string(),
+  service_date: z.string().openapi({
+    description: 'YYYYMMDD service date this row\'s timestamps were computed against.',
+    example: '20260810',
+  }),
+  stop_id: z.string(),
+  stop_sequence: z.number().int(),
+  arrival_time: z.string().nullable().openapi({ description: 'Raw GTFS HH:MM:SS, or null if this stop_time has no arrival.' }),
+  departure_time: z.string(),
+  arrival_timestamp: z.number().nullable().openapi({ description: 'Unix timestamp, or null only when arrival_time is null.' }),
+  departure_timestamp: z.number(),
+  departure_in_seconds: z.number(),
+  headsign: z.string().nullable(),
+  train_number: z.string().nullable().openapi({ description: 'LIRR/MNR train number (trip_short_name); null on subway.' }),
+  direction_id: z.union([z.literal(0), z.literal(1)]).nullable().openapi({
+    description: 'Static GTFS direction_id, as published - not derived or inferred.',
+  }),
+  track: z.string().nullable(),
+  peak: z.boolean().nullable().openapi({ description: 'LIRR/MNR fare period; null on subway, which has no such concept.' }),
+  pickup_type: z.number().int().nullable(),
+  drop_off_type: z.number().int().nullable(),
+  destination: ScheduledDepartureDestinationSchema.optional().openapi({ description: 'Present only when `to` was given.' }),
+}).openapi('ScheduledDeparture');
+
+export const ScheduleResponseSchema = z.object({
+  feed_id: FeedTypeSchema,
+  stop_id: z.string(),
+  stop_name: z.string(),
+  to_stop_id: z.string().nullable(),
+  to_stop_name: z.string().nullable(),
+  service_dates: z.array(z.string()).openapi({ description: 'The service dates actually queried, in query order.' }),
+  generated_at: z.number(),
+  source: z.literal('scheduled'),
+  departures: z.array(ScheduledDepartureSchema),
+  next_after: z.number().nullable().openapi({ description: 'Cursor for the next page (unix seconds), or null on a non-full page.' }),
+}).openapi('ScheduleResponse');
+
+export const TripStopSchema = z.object({
+  stop_id: z.string(),
+  stop_name: z.string(),
+  parent_station_id: z.string().nullable(),
+  stop_sequence: z.number().int(),
+  arrival_time: z.string().nullable(),
+  departure_time: z.string().nullable(),
+  arrival_timestamp: z.number().nullable(),
+  departure_timestamp: z.number().nullable(),
+  track: z.string().nullable(),
+  pickup_type: z.number().int().nullable(),
+  drop_off_type: z.number().int().nullable(),
+}).openapi('TripStop');
+
+export const TripScheduleResponseSchema = z.object({
+  feed_id: FeedTypeSchema,
+  trip_id: z.string().openapi({ description: 'The trip_id as requested.' }),
+  resolved_trip_id: z.string().openapi({
+    description: 'The static trip_id this response actually describes - equals `trip_id` unless `matched_by` is `rt_trip_id_suffix`.',
+  }),
+  matched_by: z.enum(['exact', 'rt_trip_id_suffix']),
+  route_id: RouteIdField,
+  route_name: RouteNameField,
+  route_long_name: RouteLongNameField,
+  service_id: z.string(),
+  service_date: z.string().nullable().openapi({
+    description: 'YYYYMMDD service date timestamps were computed against, or null when no candidate date had this trip\'s service active - every stop\'s *_timestamp is then also null, but *_time (raw HH:MM:SS) is still populated.',
+  }),
+  direction_id: z.union([z.literal(0), z.literal(1)]).nullable(),
+  headsign: z.string().nullable(),
+  train_number: z.string().nullable(),
+  peak: z.boolean().nullable(),
+  source: z.literal('scheduled'),
+  origin: TripStopSchema,
+  destination: TripStopSchema,
+  stops: z.array(TripStopSchema),
+}).openapi('TripScheduleResponse');
+
 // --- Shared query params ---
 
 export const FeedQuerySchema = z.object({

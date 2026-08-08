@@ -7,6 +7,8 @@ import {
   vehiclesRouter,
   alertsRouter,
   healthRouter,
+  scheduleRouter,
+  tripsRouter,
 } from './routes';
 
 /**
@@ -63,5 +65,7 @@ export function buildOpenApiDocument() {
   app.route('/vehicles', vehiclesRouter);
   app.route('/alerts', alertsRouter);
   app.route('/health', healthRouter);
+  app.route('/schedule', scheduleRouter);
+  app.route('/trips', tripsRouter);
   return normalizeOpenApiPaths(app.getOpenAPIDocument(openApiDocConfig));
 }
