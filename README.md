@@ -205,6 +205,8 @@ GET /arrivals?stop=1&feed=lirr
     {
       "feed_id": "lirr",
       "route_id": "3",
+      "route_name": "Oyster Bay Branch",
+      "route_long_name": "Oyster Bay Branch",
       "trip_id": "GO103_25_6558",
       "arrival_time": 1773606240,
       "arrival_in_seconds": 840,
@@ -286,6 +288,8 @@ GET /vehicles?route=L&feed=subway
 {
   "feed_id": "subway",
   "route_id": "L",
+  "route_name": "L",
+  "route_long_name": "14 St-Canarsie Local",
   "generated_at": 1773605400,
   "vehicles": [
     {
