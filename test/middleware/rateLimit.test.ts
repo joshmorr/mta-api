@@ -7,6 +7,7 @@ function makeApp() {
   app.use('*', rateLimit);
   app.get('/health', (c) => c.text('ok'));
   app.get('/anything', (c) => c.text('ok'));
+  app.all('/mcp', (c) => c.text('ok'));
   return app;
 }
 
@@ -104,5 +105,39 @@ describe('rateLimit middleware', () => {
     const res = await app.request(new Request('http://x/anything'));
     expect(res.status).toBe(200);
     expect(res.headers.get('X-RateLimit-Limit')).toBe('100');
+  });
+
+  it('advertises the higher MCP ceiling on /mcp', async () => {
+    const app = makeApp();
+    const res = await app.request(req('/mcp', ip()));
+    expect(res.status).toBe(200);
+    expect(res.headers.get('X-RateLimit-Limit')).toBe('500');
+    expect(res.headers.get('X-RateLimit-Remaining')).toBe('499');
+  });
+
+  it('keeps /mcp and REST budgets in separate buckets for the same IP', async () => {
+    const app = makeApp();
+    const myIp = ip();
+    // Exhaust the REST budget entirely.
+    for (let i = 0; i < 101; i++) await app.request(req('/anything', myIp));
+    expect((await app.request(req('/anything', myIp))).status).toBe(429);
+    // MCP is untouched by that.
+    const mcp = await app.request(req('/mcp', myIp));
+    expect(mcp.status).toBe(200);
+    expect(mcp.headers.get('X-RateLimit-Remaining')).toBe('499');
+  });
+
+  it('returns 429 on /mcp once the MCP ceiling is exceeded', async () => {
+    const app = makeApp();
+    const myIp = ip();
+    let lastStatus = 0;
+    for (let i = 0; i < 500; i++) {
+      lastStatus = (await app.request(req('/mcp', myIp))).status;
+    }
+    expect(lastStatus).toBe(200); // 500th — at the limit, still allowed
+    const overflow = await app.request(req('/mcp', myIp));
+    expect(overflow.status).toBe(429);
+    const body = (await overflow.json()) as { code: string };
+    expect(body.code).toBe('RATE_LIMITED');
   });
 });

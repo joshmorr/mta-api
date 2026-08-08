@@ -15,11 +15,18 @@ import { config } from '../config';
 const WINDOW_MS = config.rateLimitWindowMs;
 const MAX_REQUESTS = config.rateLimitMax;
 
+// /mcp gets its own ceiling *and* its own bucket, not a shared counter with a
+// per-path max — otherwise the X-RateLimit-* headers a client sees would flip
+// between the two limits, and a chatty agent session would eat the REST budget
+// for the same IP. Per-IP totals are therefore max + mcpMax; that's deliberate.
+const MCP_PATH = '/mcp';
+const MCP_MAX_REQUESTS = config.mcpRateLimitMax;
+
 const store = new Map<string, { count: number; resetAt: number }>();
 setInterval(() => {
   const now = Date.now();
-  for (const [ip, entry] of store) {
-    if (now >= entry.resetAt) store.delete(ip);
+  for (const [key, entry] of store) {
+    if (now >= entry.resetAt) store.delete(key);
   }
 }, WINDOW_MS).unref();
 
@@ -38,21 +45,24 @@ export const rateLimit: MiddlewareHandler = async (c, next) => {
     c.req.header('fly-client-ip')?.trim() ||
     c.req.header('x-forwarded-for')?.split(',')[0].trim() ||
     'unknown';
+  const isMcp = c.req.path === MCP_PATH;
+  const max = isMcp ? MCP_MAX_REQUESTS : MAX_REQUESTS;
+  const key = isMcp ? `mcp:${ip}` : ip;
   const now = Date.now();
-  let entry = store.get(ip);
+  let entry = store.get(key);
 
   if (!entry || now >= entry.resetAt) {
     entry = { count: 1, resetAt: now + WINDOW_MS };
-    store.set(ip, entry);
+    store.set(key, entry);
   } else {
     entry.count++;
   }
 
-  c.header('X-RateLimit-Limit', String(MAX_REQUESTS));
-  c.header('X-RateLimit-Remaining', String(Math.max(0, MAX_REQUESTS - entry.count)));
+  c.header('X-RateLimit-Limit', String(max));
+  c.header('X-RateLimit-Remaining', String(Math.max(0, max - entry.count)));
   c.header('X-RateLimit-Reset', String(Math.ceil(entry.resetAt / 1000)));
 
-  if (entry.count > MAX_REQUESTS) {
+  if (entry.count > max) {
     // Retry-After (delta seconds) is the standard header clients/libraries
     // honor for backoff; X-RateLimit-Reset (epoch seconds) is informational.
     c.header('Retry-After', String(Math.max(0, Math.ceil((entry.resetAt - now) / 1000))));

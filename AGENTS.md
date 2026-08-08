@@ -41,6 +41,7 @@ Copy `.env.example` to `.env`. All have defaults so the server starts without on
 | `RT_FETCH_TIMEOUT_MS` | `10000` | Upstream RT fetch timeout (abort) |
 | `STATIC_FETCH_TIMEOUT_MS` | `60000` | Upstream static GTFS zip fetch timeout (abort); used by `bun run seed` and CI |
 | `RATE_LIMIT_MAX` | `100` | Requests per window per client IP (per-instance) |
+| `MCP_RATE_LIMIT_MAX` | `5 × RATE_LIMIT_MAX` | Ceiling for `POST /mcp`, which gets its own per-IP bucket (HTTP transport only) |
 | `RATE_LIMIT_WINDOW_MS` | `60000` | Rate-limit fixed-window length |
 
 ## Architecture
