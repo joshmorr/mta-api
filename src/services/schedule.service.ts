@@ -237,7 +237,7 @@ export function getTripSchedule(params: TripScheduleParams, now: Date = new Date
     if (feedId === 'mnr') {
       throw new NotFoundError(
         `Trip ${tripId} not found. Metro-North's realtime trip IDs can't be resolved to a static ` +
-        'trip_id - the two ID schemes are unrelated for this feed.',
+        'trip_id - the two ID schemes are unrelated for this feed',
       );
     }
 
@@ -254,13 +254,13 @@ export function getTripSchedule(params: TripScheduleParams, now: Date = new Date
     }
 
     if (!meta) {
-      throw new NotFoundError(`Trip ${tripId} not found in the ${feedId} feed.`);
+      throw new NotFoundError(`Trip ${tripId} not found in the ${feedId} feed`);
     }
   }
 
   const stopRows = getTripStops(feedId, resolvedTripId);
   if (!stopRows.length) {
-    throw new NotFoundError(`Trip ${resolvedTripId} has no scheduled stops.`);
+    throw new NotFoundError(`Trip ${resolvedTripId} has no scheduled stops`);
   }
 
   const serviceDate = resolveServiceDate(feedId, resolvedTripId, date, now);

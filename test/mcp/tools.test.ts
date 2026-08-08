@@ -1,6 +1,7 @@
 import { describe, expect, it, beforeEach, afterAll } from 'bun:test';
 import { makeMcpClient, textOf } from '../helpers/mcp';
-import { resetDb, seedSubway, seedLirr, seedMnr } from '../helpers/seed';
+import { resetDb, seedSubway, seedLirr, seedMnr, seedLirrSchedule, seedSubwaySchedule } from '../helpers/seed';
+import { db } from '../../src/db/client';
 
 const mcp = makeMcpClient();
 
@@ -16,10 +17,12 @@ const EXPECTED_TOOLS = [
   'mta_get_arrivals',
   'mta_get_vehicles',
   'mta_get_alerts',
+  'mta_get_schedule',
+  'mta_get_trip',
 ];
 
 describe('tools/list', () => {
-  it('advertises exactly the seven MTA tools', async () => {
+  it('advertises exactly the nine MTA tools', async () => {
     const names = (await mcp.listTools()).map((t) => t.name);
     expect(names.sort()).toEqual([...EXPECTED_TOOLS].sort());
   });
@@ -57,7 +60,7 @@ describe('tools/list', () => {
       (t) => (t.inputSchema.required as string[] | undefined)?.includes('feed'),
     );
     expect(feedScoped.map((t) => t.name).sort()).toEqual(
-      ['mta_get_arrivals', 'mta_get_route', 'mta_get_stop', 'mta_get_vehicles'],
+      ['mta_get_arrivals', 'mta_get_route', 'mta_get_schedule', 'mta_get_stop', 'mta_get_trip', 'mta_get_vehicles'],
     );
     for (const tool of feedScoped) {
       expect(tool.description).toMatch(/reuses IDs across systems/);
@@ -66,8 +69,20 @@ describe('tools/list', () => {
 
   it('tells the model to label routes by name on the tools that return one', async () => {
     const byName = new Map((await mcp.listTools()).map((t) => [t.name, t]));
-    for (const name of ['mta_get_arrivals', 'mta_get_vehicles']) {
+    for (const name of ['mta_get_arrivals', 'mta_get_vehicles', 'mta_get_schedule', 'mta_get_trip']) {
       expect(byName.get(name)?.description).toMatch(/never by `route_id`/);
+    }
+  });
+
+  it('warns that MNR trip IDs are unresolvable, so an agent stops retrying', async () => {
+    const byName = new Map((await mcp.listTools()).map((t) => [t.name, t]));
+    expect(byName.get('mta_get_trip')?.description).toMatch(/Metro-North realtime trip IDs cannot be resolved/);
+  });
+
+  it('marks mta_get_schedule and mta_get_trip static, not open-world', async () => {
+    const byName = new Map((await mcp.listTools()).map((t) => [t.name, t]));
+    for (const name of ['mta_get_schedule', 'mta_get_trip']) {
+      expect(byName.get(name)?.annotations?.openWorldHint).toBeFalsy();
     }
   });
 
@@ -255,6 +270,119 @@ describe('mta_get_route', () => {
   it('does not find an LIRR route under the subway feed', async () => {
     const result = await mcp.callTool('mta_get_route', { route_id: 'PW', feed: 'subway' });
     expect(result.isError).toBe(true);
+  });
+});
+
+describe('mta_get_schedule', () => {
+  beforeEach(() => {
+    resetDb();
+    seedLirrSchedule();
+  });
+
+  it('returns the real Deer Park -> Penn Station example', async () => {
+    const result = await mcp.callTool('mta_get_schedule', {
+      stop: '44',
+      feed: 'lirr',
+      to: '237',
+      date: '20240115',
+      limit: 5,
+    });
+    expect(result.isError).toBeFalsy();
+    const body = result.structuredContent as {
+      stop_name: string;
+      to_stop_name: string;
+      source: string;
+      departures: Array<{ destination?: { stop_name: string; duration_seconds: number } }>;
+    };
+    expect(body.stop_name).toBe('Deer Park');
+    expect(body.to_stop_name).toBe('Penn Station');
+    expect(body.source).toBe('scheduled');
+    expect(body.departures).toHaveLength(1);
+    expect(body.departures[0].destination?.stop_name).toBe('Penn Station');
+    expect(body.departures[0].destination?.duration_seconds).toBeGreaterThan(0);
+  });
+
+  it('mirrors the structured content in the text block', async () => {
+    const result = await mcp.callTool('mta_get_schedule', { stop: '44', feed: 'lirr', date: '20240115' });
+    expect(JSON.parse(textOf(result))).toEqual(result.structuredContent);
+  });
+
+  it('reports an unknown stop with a mta_search_stops hint', async () => {
+    const result = await mcp.callTool('mta_get_schedule', { stop: 'nope', feed: 'lirr' });
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toMatch(/mta_search_stops/);
+  });
+
+  it('rejects a call with no feed rather than guessing one', async () => {
+    const result = await mcp.callTool('mta_get_schedule', { stop: '44' });
+    expect(result.isError).toBe(true);
+  });
+
+  it('rejects an unknown argument', async () => {
+    const result = await mcp.callTool('mta_get_schedule', { stop: '44', feed: 'lirr', route: 'bogus' });
+    expect(result.isError).toBe(true);
+  });
+});
+
+describe('mta_get_trip', () => {
+  beforeEach(() => {
+    resetDb();
+    seedLirrSchedule();
+  });
+
+  it('resolves a real LIRR trip end to end', async () => {
+    const result = await mcp.callTool('mta_get_trip', {
+      trip_id: 'GO201_26_SCHED',
+      feed: 'lirr',
+      date: '20240115',
+    });
+    expect(result.isError).toBeFalsy();
+    const body = result.structuredContent as {
+      matched_by: string;
+      resolved_trip_id: string;
+      route_long_name: string;
+      origin: { stop_id: string };
+      destination: { stop_id: string };
+      stops: unknown[];
+    };
+    expect(body.matched_by).toBe('exact');
+    expect(body.resolved_trip_id).toBe('GO201_26_SCHED');
+    expect(body.route_long_name).toBe('Ronkonkoma Branch');
+    expect(body.origin.stop_id).toBe('44');
+    expect(body.destination.stop_id).toBe('237');
+    expect(body.stops).toHaveLength(3);
+  });
+
+  it('resolves a subway trip via suffix match when no exact match exists', async () => {
+    resetDb();
+    seedSubwaySchedule();
+    db.run(
+      `INSERT INTO trips (feed_id, trip_id, route_id, service_id, direction_id, shape_id)
+       VALUES ('subway', '086850_1..S03R', '1', 'WKDY', 1, NULL)`,
+    );
+    db.run(
+      `INSERT INTO stop_times (feed_id, trip_id, stop_id, arrival_time, departure_time, stop_sequence, arrival_seconds, departure_seconds)
+       VALUES ('subway', '086850_1..S03R', '127N', '11:00:00', '11:00:00', 1, ${11 * 3600}, ${11 * 3600})`,
+    );
+    const result = await mcp.callTool('mta_get_trip', { trip_id: '1..S03R', feed: 'subway', date: '20240115' });
+    expect(result.isError).toBeFalsy();
+    const body = result.structuredContent as { matched_by: string; resolved_trip_id: string; trip_id: string };
+    expect(body.matched_by).toBe('rt_trip_id_suffix');
+    expect(body.resolved_trip_id).toBe('086850_1..S03R');
+    expect(body.trip_id).toBe('1..S03R');
+  });
+
+  it('reports an unknown trip with a lookup hint', async () => {
+    const result = await mcp.callTool('mta_get_trip', { trip_id: 'not-a-real-trip', feed: 'lirr' });
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toMatch(/mta_get_schedule|mta_get_arrivals/);
+  });
+
+  it('reports MNR unresolvability distinctly, without retrying a suffix match', async () => {
+    resetDb();
+    const result = await mcp.callTool('mta_get_trip', { trip_id: 'some-realtime-id', feed: 'mnr' });
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toMatch(/Metro-North's realtime trip IDs can't be resolved/);
   });
 });
 

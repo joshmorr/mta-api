@@ -64,6 +64,34 @@ export const GetArrivalsInput = z.object({
     .describe('Filter to arrivals in this compass direction. Subway only - LIRR/MNR arrivals never carry a direction, so this excludes them entirely.'),
 }).strict();
 
+const YYYYMMDD_DESCRIPTION = 'YYYYMMDD, e.g. "20260810". Not a wall-clock string — a bare calendar date.';
+
+export const GetScheduleInput = z.object({
+  stop: z.string().min(1)
+    .describe('Stop ID to get the static timetable for. Use a parent station ID to cover every platform.'),
+  feed: FeedSchema.describe(FEED_DESCRIPTION),
+  to: z.string().min(1).optional()
+    .describe('Destination stop ID. When given, only departures whose trip reaches this stop later are ' +
+      'returned, each carrying a `destination` object with the arrival time there and duration_seconds.'),
+  after: z.number().int().nonnegative().optional()
+    .describe('Unix seconds cursor — only departures at or after this instant are returned. Omit for "starting ' +
+      'now" (or the start of `date`, if `date` is given without this).'),
+  date: z.string().regex(/^\d{8}$/, 'must be YYYYMMDD').optional()
+    .describe(`Pin the query to a single service date (${YYYYMMDD_DESCRIPTION}) instead of the default ` +
+      '[yesterday, today, tomorrow] window — gives the whole day\'s timetable when `after` is also omitted.'),
+  limit: z.number().int().positive().max(100).default(20)
+    .describe('Maximum departures to return, soonest first.'),
+}).strict();
+
+export const GetTripInput = z.object({
+  trip_id: z.string().min(1)
+    .describe('Trip ID, typically read off the trip_id field of mta_get_arrivals or mta_get_schedule results.'),
+  feed: FeedSchema.describe(FEED_DESCRIPTION),
+  date: z.string().regex(/^\d{8}$/, 'must be YYYYMMDD').optional()
+    .describe(`Service date to compute timestamps against (${YYYYMMDD_DESCRIPTION}). Omit to default to the ` +
+      'first of [yesterday, today, tomorrow] the trip\'s service is actually active on.'),
+}).strict();
+
 export const GetVehiclesInput = z.object({
   route: z.string().min(1)
     .describe('Route ID to list active vehicles for.'),

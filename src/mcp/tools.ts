@@ -3,6 +3,7 @@ import { searchStops, getStopDetail } from '../services/stops.service';
 import { listRoutes, getRoute } from '../services/routes.service';
 import { getAlerts, parseDirection } from '../services/alerts.service';
 import { getArrivalsForStop, getVehiclesForRoute, NotFoundError } from '../services/realtime.service';
+import { getSchedule, getTripSchedule } from '../services/schedule.service';
 import {
   StopListResponseSchema,
   StopDetailSchema,
@@ -10,6 +11,8 @@ import {
   RouteResponseSchema,
   ArrivalResponseSchema,
   VehicleListResponseSchema,
+  ScheduleResponseSchema,
+  TripScheduleResponseSchema,
 } from '../schemas/api';
 import {
   SearchStopsInput,
@@ -20,6 +23,8 @@ import {
   GetVehiclesInput,
   GetAlertsInput,
   AlertToolOutput,
+  GetScheduleInput,
+  GetTripInput,
 } from './schemas';
 
 /** Static-schedule tools read the local SQLite snapshot; nothing leaves the process. */
@@ -64,6 +69,18 @@ function toToolError(err: unknown, hint: string) {
   if (err instanceof NotFoundError) return fail(`${err.message}. ${hint}`);
   const message = err instanceof Error ? err.message : String(err);
   return fail(`Upstream realtime feed unavailable: ${message}. The MTA feed may be down; retry shortly.`);
+}
+
+/**
+ * The schedule/trip tools read only the static SQLite snapshot — there is no
+ * upstream feed to blame a failure on, so unlike `toToolError` this doesn't
+ * invent a "feed unavailable" story for whatever isn't a NotFoundError. A
+ * NotFoundError means the caller guessed an ID; anything else is a genuine
+ * bug and is rethrown rather than mislabeled.
+ */
+function toNotFoundToolError(err: unknown, hint: string) {
+  if (err instanceof NotFoundError) return fail(`${err.message}. ${hint}`);
+  throw err;
 }
 
 export function registerMtaTools(server: McpServer): void {
@@ -164,6 +181,70 @@ export function registerMtaTools(server: McpServer): void {
         );
       }
       return ok(route);
+    },
+  );
+
+  server.registerTool(
+    'mta_get_schedule',
+    {
+      title: 'Get the static timetable for an MTA stop',
+      description:
+        'Scheduled departures from a stop, sourced from the static GTFS timetable rather than a realtime ' +
+        `feed. ${FEED_NOTE}\n\n` +
+        'Unlike mta_get_arrivals, results are unaffected by feed outages and extend arbitrarily far into the ' +
+        'future or past: use `date` to look up a specific day\'s whole timetable, or the default rolling ' +
+        '[yesterday, today, tomorrow] window with `after` (Unix seconds) to page forward through it. Give ' +
+        '`to` to filter to departures whose trip reaches a specific destination stop — each then carries a ' +
+        '`destination` object with the arrival time there and duration_seconds.\n\n' +
+        `${ROUTE_NAME_NOTE}\n\n` +
+        'Answers "what time do trains run" or "how do I get from A to B and how long does it take" — for ' +
+        '"when is the next train right now" prefer mta_get_arrivals instead, since this tool cannot see live ' +
+        'delays, reroutes, or cancellations.\n\n' +
+        'Use mta_search_stops first to turn a station name into an ID.',
+      inputSchema: GetScheduleInput,
+      outputSchema: ScheduleResponseSchema,
+      annotations: STATIC,
+    },
+    async ({ stop, feed, to, after, date, limit }) => {
+      try {
+        return ok(getSchedule({ stopId: stop, feedId: feed, toStopId: to, after, date, limit }));
+      } catch (err) {
+        return toNotFoundToolError(
+          err,
+          `Check the stop (and destination, if given) exist in the ${feed} feed with mta_search_stops.`,
+        );
+      }
+    },
+  );
+
+  server.registerTool(
+    'mta_get_trip',
+    {
+      title: 'Get the static schedule for one MTA trip',
+      description:
+        'Resolves a trip_id — typically read off the trip_id field of mta_get_arrivals or mta_get_schedule — ' +
+        'to its full static stop-by-stop schedule: every stop the trip visits, in order, with scheduled ' +
+        `arrival/departure times and Unix timestamps. ${FEED_NOTE}\n\n` +
+        'LIRR trip IDs must match exactly. Subway realtime trip IDs are frequently a *suffix* of the static ' +
+        'ID and are resolved via a fallback match narrowed to the active service window — check `matched_by` ' +
+        '("exact" or "rt_trip_id_suffix") and `resolved_trip_id` if you need to know which happened. ' +
+        '**Metro-North realtime trip IDs cannot be resolved to a static trip at all** — the two ID schemes ' +
+        'are unrelated for that feed, so an MNR trip_id read off mta_get_arrivals will always fail here. ' +
+        'Do not retry with the same ID.\n\n' +
+        `${ROUTE_NAME_NOTE}\n\n` +
+        'Use `date` to pin which service date the timestamps are computed against; omitted, it defaults to ' +
+        'the first of [yesterday, today, tomorrow] the trip is actually running on, or — if none of those ' +
+        'three are — `service_date: null` with raw HH:MM:SS times only and every timestamp null.',
+      inputSchema: GetTripInput,
+      outputSchema: TripScheduleResponseSchema,
+      annotations: STATIC,
+    },
+    async ({ trip_id, feed, date }) => {
+      try {
+        return ok(getTripSchedule({ tripId: trip_id, feedId: feed, date }));
+      } catch (err) {
+        return toNotFoundToolError(err, 'Check the trip_id and feed with mta_get_schedule or mta_get_arrivals.');
+      }
     },
   );
 
