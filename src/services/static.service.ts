@@ -11,6 +11,7 @@ import {
   upsertRoutes,
   upsertStops,
   upsertStopTimesBatch,
+  upsertTransfers,
   upsertTrips,
 } from '../db/queries/staticFeed';
 import type {
@@ -21,6 +22,7 @@ import type {
   GtfsStopTime,
   GtfsCalendar,
   GtfsCalendarDate,
+  GtfsTransfer,
 } from '../types/gtfs';
 
 const SUBWAY_URL = 'https://rrgtfsfeeds.s3.amazonaws.com/gtfs_supplemented.zip';
@@ -30,7 +32,7 @@ const MNR_URL    = 'https://rrgtfsfeeds.s3.amazonaws.com/gtfsmnr.zip';
 /** Only decompress files we actually import — skip shapes.txt etc. */
 const NEEDED_FILES = new Set([
   'stops.txt', 'routes.txt', 'trips.txt', 'stop_times.txt',
-  'calendar.txt', 'calendar_dates.txt',
+  'calendar.txt', 'calendar_dates.txt', 'transfers.txt',
 ]);
 
 // --- Feed sync ---
@@ -106,8 +108,13 @@ async function syncFeed(url: string, feedId: FeedId) {
   if (cdRows.length) upsertCalendarDates(cdRows, feedId);
   cdRows = null!;
 
+  let transferRows = extractAndParse(files, 'transfers.txt') as unknown as GtfsTransfer[];
+  counts.transfers = transferRows.length;
+  if (transferRows.length) upsertTransfers(transferRows, feedId);
+  transferRows = null!;
+
   setFeedMeta(feedId);
-  console.error(`[staticFeed] ${feedId} synced. stops=${counts.stops} routes=${counts.routes} trips=${counts.trips} stop_times=${counts.stop_times} calendar_dates=${counts.calendar_dates}`);
+  console.error(`[staticFeed] ${feedId} synced. stops=${counts.stops} routes=${counts.routes} trips=${counts.trips} stop_times=${counts.stop_times} calendar_dates=${counts.calendar_dates} transfers=${counts.transfers}`);
 }
 
 export async function syncSubwayFeed() {

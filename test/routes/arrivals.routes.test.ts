@@ -139,6 +139,36 @@ describe('GET /arrivals', () => {
       expect(body.arrivals).toHaveLength(50);
     });
 
+    it('keeps departure-only stop time updates with null arrival', async () => {
+      const now = pinClockToMonday();
+      stubFetchOk(
+        await encodeFeedMessage({
+          header: { gtfsRealtimeVersion: '2.0', timestamp: now },
+          entity: [
+            {
+              id: 'a',
+              tripUpdate: {
+                trip: { tripId: 'T1', routeId: '1' },
+                stopTimeUpdate: [
+                  { stopId: '127N', arrival: { time: now + 200 } },
+                  { stopId: '127S', departure: { time: now + 60 } },
+                ],
+              },
+            },
+          ],
+        }),
+      );
+      const res = await app.request('/arrivals?stop=127&feed=subway');
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as {
+        arrivals: Array<{ arrival_time: number | null; arrival_in_seconds: number | null }>;
+      };
+      expect(body.arrivals).toHaveLength(2);
+      const depOnly = body.arrivals.find((a) => a.arrival_time === null);
+      expect(depOnly).toBeDefined();
+      expect(depOnly!.arrival_in_seconds).toBeNull();
+    });
+
     it('forwards routes filter as comma-separated', async () => {
       // Add a second route '2' on the same platform so we have something to filter
       db.run(

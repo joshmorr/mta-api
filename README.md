@@ -171,9 +171,14 @@ GET /stops/1?feed=lirr
   "platforms": [
     { "stop_id": "127N", "direction": "Uptown / Northbound" },
     { "stop_id": "127S", "direction": "Downtown / Southbound" }
+  ],
+  "transfers": [
+    { "to_stop_id": "902", "to_stop_name": "Times Sq-42 St", "transfer_type": 2, "min_transfer_time": 180, "from_route_id": null, "to_route_id": null, "from_trip_id": null, "to_trip_id": null }
   ]
 }
 ```
+
+> `transfers` comes straight from GTFS `transfers.txt`. `from_route_id`/`to_route_id` are populated on MNR only; `from_trip_id`/`to_trip_id` on LIRR and MNR only (per-trip guaranteed transfers, so the same `to_stop_id` can repeat once per trip pair).
 
 ---
 
@@ -187,10 +192,12 @@ Live arrivals at a stop, sourced from GTFS-RT feeds filtered against the active 
 | `feed` | string | **required** | One of `subway`, `lirr`, `mnr` |
 | `limit` | number | `5` | Max arrivals (max 50) |
 | `routes` | string | all | Comma-separated route filter, e.g. `1,2,3` |
+| `direction` | string | all | `NORTH` or `SOUTH`. Subway only — LIRR/MNR arrivals never carry a direction, so this excludes them entirely. |
 
 ```
 GET /arrivals?stop=127N&feed=subway
 GET /arrivals?stop=127N&feed=subway&limit=3&routes=1,2
+GET /arrivals?stop=127&feed=subway&direction=NORTH
 GET /arrivals?stop=1&feed=lirr
 ```
 
@@ -210,13 +217,158 @@ GET /arrivals?stop=1&feed=lirr
       "trip_id": "GO103_25_6558",
       "arrival_time": 1773606240,
       "arrival_in_seconds": 840,
-      "status": "IN_TRANSIT_TO"
+      "departure_time": 1773606240,
+      "departure_in_seconds": 840,
+      "delay_seconds": null,
+      "destination_stop_id": "5",
+      "destination": "Oyster Bay",
+      "direction": null,
+      "direction_id": 0,
+      "direction_source": "rt_direction_id",
+      "train_number": "2306",
+      "status": "IN_TRANSIT_TO",
+      "source": "realtime"
     }
   ]
 }
 ```
 
+`arrival_time` and `arrival_in_seconds` are `null` for departure-only updates (e.g. at origin terminals where a train originates rather than arrives). The arrival is still included and sorted by its departure time.
+
+`destination`/`destination_stop_id` is the trip's true terminus — the last stop time update in the feed, not a static `trip_headsign` — resolved with zero truncation across all three feeds. For a subway platform ID this resolves to the parent station's name, not the platform.
+
+Direction is feed-honest, not uniform, because the three systems don't publish the same signal: subway `direction` (`NORTH`/`SOUTH`, `direction_source: "stop_suffix"`) comes from the matched platform's `N`/`S` suffix and has 100% coverage; LIRR `direction_id` (`0`/`1`, `direction_source: "rt_direction_id"`) is branch-relative as published by the railroad, not a compass direction — `direction_id=1` on a train headed to Penn Station means inbound, not south; Metro-North publishes neither, because its direction *is* `destination`. Any field the feed doesn't publish for a given trip is `null`, including `status`, `delay_seconds`, and `train_number` (LIRR/MNR only).
+
 When the upstream RT fetch fails but a cached feed is available, the response is served with `stale: true` and `feed_error` describing the reason.
+
+---
+
+### `GET /schedule`
+
+Scheduled departures from a stop, sourced from the static GTFS timetable rather than realtime feeds — unaffected by feed outages, and not limited to the near future. `stop` and `feed` are required.
+
+| Param | Type | Default | Description |
+|-------|------|---------|-------------|
+| `stop` | string | **required** | Platform or parent station ID |
+| `feed` | string | **required** | One of `subway`, `lirr`, `mnr` |
+| `to` | string | none | Destination stop ID. Filters to departures whose trip reaches this stop later, and adds a `destination` object to each one. |
+| `after` | number | now | Unix seconds cursor — only departures at or after this instant. |
+| `date` | string | none | Pin the query to a single `YYYYMMDD` service date instead of the default rolling `[yesterday, today, tomorrow]` window. |
+| `limit` | number | `20` | Max departures (max 100). |
+
+```
+GET /schedule?stop=44&feed=lirr&to=237&limit=5
+GET /schedule?stop=127&feed=subway&date=20260810
+```
+
+```json
+{
+  "feed_id": "lirr",
+  "stop_id": "44",
+  "stop_name": "Deer Park",
+  "to_stop_id": "237",
+  "to_stop_name": "Penn Station",
+  "service_dates": ["20260807", "20260808", "20260809"],
+  "generated_at": 1786226151,
+  "source": "scheduled",
+  "departures": [
+    {
+      "feed_id": "lirr",
+      "trip_id": "GO201_26_7977_1",
+      "route_id": "4",
+      "route_name": "Ronkonkoma Branch",
+      "route_long_name": "Ronkonkoma Branch",
+      "service_id": "1C6B8C2D",
+      "service_date": "20260808",
+      "stop_id": "44",
+      "stop_sequence": 4,
+      "arrival_time": "18:22:00",
+      "departure_time": "18:22:00",
+      "arrival_timestamp": 1786227720,
+      "departure_timestamp": 1786227720,
+      "departure_in_seconds": 1569,
+      "headsign": "Penn Station",
+      "train_number": "7977",
+      "direction_id": 1,
+      "track": null,
+      "peak": false,
+      "pickup_type": 0,
+      "drop_off_type": 0,
+      "destination": {
+        "stop_id": "237",
+        "stop_name": "Penn Station",
+        "stop_sequence": 15,
+        "arrival_time": "19:31:00",
+        "arrival_timestamp": 1786231860,
+        "duration_seconds": 4140
+      }
+    }
+  ],
+  "next_after": 1786227721
+}
+```
+
+This endpoint has no concept of live delays, reroutes, or cancellations — for "what's the next train right now" prefer `/arrivals`. Pagination is a Unix-seconds cursor: fetch the next page with `after=<next_after>` from the previous response; `next_after` is `null` once a page comes back short of `limit`, the signal there's nothing more to page through.
+
+`date` pins the query to one service date and returns that day's whole timetable (paginated by `limit`/`after` within it); omitted, the query spans the rolling 3-day window instead, which is what lets a query made late at night still surface an overnight trip whose GTFS time is past `24:00:00`.
+
+`direction_id` is the raw static GTFS value (feed-defined, not derived) — see the branch-relative-not-compass caveat under `/arrivals` above. `peak` is the railroad's own fare-period designation (`true`/`false`) for LIRR/MNR, `null` on subway (no such concept) and wherever the source feed doesn't publish it — it is never derived from the departure time.
+
+---
+
+### `GET /trips/:trip_id`
+
+Resolves a `trip_id` — typically read off `/arrivals` or `/schedule` — to its full static, stop-by-stop schedule. `feed` is required.
+
+| Param | Type | Default | Description |
+|-------|------|---------|-------------|
+| `feed` | string | **required** | One of `subway`, `lirr`, `mnr` |
+| `date` | string | first active date | `YYYYMMDD` service date to compute timestamps against. |
+
+```
+GET /trips/GO201_26_7977_1?feed=lirr
+GET /trips/GO201_26_7977_1?feed=lirr&date=20260810
+```
+
+```json
+{
+  "feed_id": "lirr",
+  "trip_id": "GO201_26_7977_1",
+  "resolved_trip_id": "GO201_26_7977_1",
+  "matched_by": "exact",
+  "route_id": "4",
+  "route_name": "Ronkonkoma Branch",
+  "route_long_name": "Ronkonkoma Branch",
+  "service_id": "1C6B8C2D",
+  "service_date": "20260808",
+  "direction_id": 1,
+  "headsign": "Penn Station",
+  "train_number": "7977",
+  "peak": false,
+  "source": "scheduled",
+  "origin": {
+    "stop_id": "179", "stop_name": "Ronkonkoma", "parent_station_id": null, "stop_sequence": 1,
+    "arrival_time": "18:05:00", "departure_time": "18:05:00",
+    "arrival_timestamp": 1786226700, "departure_timestamp": 1786226700,
+    "track": null, "pickup_type": 0, "drop_off_type": 0
+  },
+  "destination": {
+    "stop_id": "237", "stop_name": "Penn Station", "parent_station_id": null, "stop_sequence": 15,
+    "arrival_time": "19:31:00", "departure_time": "19:31:00",
+    "arrival_timestamp": 1786231860, "departure_timestamp": 1786231860,
+    "track": null, "pickup_type": 0, "drop_off_type": 0
+  },
+  "stops": [
+    { "...": "one entry per stop, same shape as origin/destination, in stop_sequence order (15 here)" }
+  ]
+}
+```
+
+LIRR trip IDs must match exactly. Subway realtime trip IDs are frequently a *suffix* of the static ID (an RT ID like `1..S03R` off `/arrivals` resolving to a static `086850_1..S03R`) and are matched via a fallback narrowed to the active service window — check `matched_by` (`"exact"` or `"rt_trip_id_suffix"`) and `resolved_trip_id` if it matters which happened. **Metro-North realtime trip IDs cannot be resolved to a static trip at all** — the two ID schemes are unrelated for that feed, so an MNR `trip_id` read off `/arrivals` always 404s here.
+
+`date` defaults to the first of `[yesterday, today, tomorrow]` the trip's service is active on; if none of those three are, `service_date` is `null` and every stop's `*_timestamp` is `null` too — the raw `*_time` (`HH:MM:SS`) fields are still populated, since a static trip's schedule doesn't depend on which date you're asking about.
+
+`origin`/`destination` are just `stops[0]`/`stops[stops.length - 1]`, surfaced at the top level for convenience.
 
 ---
 
@@ -412,19 +564,23 @@ npx @modelcontextprotocol/inspector bun run src/mcp/stdio.ts
 
 ### Tools
 
-All seven are read-only and non-destructive.
+All nine are read-only and non-destructive.
 
 | Tool | Returns | Live feed |
 |------|---------|:---:|
 | `mta_search_stops` | Stops by name, by proximity, or unfiltered | |
-| `mta_get_stop` | One stop with its platforms and their directions | |
+| `mta_get_stop` | One stop with its platforms, their directions, and its GTFS transfers | |
 | `mta_list_routes` | All routes, optionally for one system | |
 | `mta_get_route` | One route's names and colour | |
+| `mta_get_schedule` | Scheduled departures from a stop, from the static timetable — optionally filtered to a destination | |
+| `mta_get_trip` | One trip's full stop-by-stop static schedule, resolved from a trip_id | |
 | `mta_get_arrivals` | Upcoming arrivals at a stop, soonest first | ✅ |
 | `mta_get_vehicles` | Trains currently active on a route | ✅ |
 | `mta_get_alerts` | Active service alerts, filterable by route or stop | ✅ |
 
-The [feed scoping](#feed-scoping) rule applies: `mta_get_stop`, `mta_get_route`, `mta_get_arrivals`, and `mta_get_vehicles` all require `feed`, and each tool's description explains why. `mta_get_alerts` is the exception — alerts for all three systems arrive on one upstream feed, so it filters by route or stop instead.
+The [feed scoping](#feed-scoping) rule applies: `mta_get_stop`, `mta_get_route`, `mta_get_schedule`, `mta_get_trip`, `mta_get_arrivals`, and `mta_get_vehicles` all require `feed`, and each tool's description explains why. `mta_get_alerts` is the exception — alerts for all three systems arrive on one upstream feed, so it filters by route or stop instead.
+
+`mta_get_schedule` and `mta_get_trip` read only the static timetable, like `mta_get_stop`/`mta_get_route` — they have no live-feed fallback behavior because they never touch a live feed. `mta_get_trip` cannot resolve a Metro-North realtime trip_id to a static one at all (the two ID schemes are unrelated for that feed); its description says so explicitly so an agent doesn't retry.
 
 Realtime tools degrade the way the HTTP endpoints do: when an upstream feed cannot be reached, cached data is returned with `stale: true` and a `feed_error`, rather than the call failing.
 

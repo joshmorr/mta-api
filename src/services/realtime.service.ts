@@ -1,39 +1,85 @@
 import { getFeed } from '../cache/rtCache';
 import { getFeedPath } from './feed.service';
-import type { FeedId, FeedMessage } from '../types/gtfs';
+import type { FeedId, FeedMessage, VehiclePosition } from '../types/gtfs';
 import type { ArrivalResponse, Arrival, VehicleResponse } from '../types/api';
 import {
   getChildPlatformIds,
   getServedRouteIdsByStopIds,
-  type ServiceDateFilter,
-  type WeekdayColumn,
   getStopNameById,
   isPlatformStop,
 } from '../db/queries/realtimeFeed';
 import { findRoutesById, getRoutesByIds } from '../db/queries/routes';
 import { toRouteNames } from './routes.service';
-import { findStopsById, getParentId } from '../db/queries/stops';
+import { findStopsById, getParentId, getStopNamesByIds } from '../db/queries/stops';
 import { toNumber } from '../utils/realtime';
+import { getRelevantServiceDates } from '../utils/serviceDate';
 
 // VehicleStopStatus is a proto enum; protobufjs decodes it as an int.
 // Map back to the string union our API contract returns.
-const VEHICLE_STOP_STATUS: Record<number, Arrival['status']> = {
+const VEHICLE_STOP_STATUS: Record<number, NonNullable<Arrival['status']>> = {
   0: 'INCOMING_AT',
   1: 'STOPPED_AT',
   2: 'IN_TRANSIT_TO',
 };
 
-function toStopStatus(raw: unknown): Arrival['status'] {
-  if (typeof raw === 'string') return raw as Arrival['status'];
+function toStopStatus(raw: unknown): NonNullable<Arrival['status']> {
+  if (typeof raw === 'string') return raw as NonNullable<Arrival['status']>;
   if (typeof raw === 'number' && raw in VEHICLE_STOP_STATUS) return VEHICLE_STOP_STATUS[raw];
   return 'IN_TRANSIT_TO';
+}
+
+// current_status defaults to IN_TRANSIT_TO in proto2, so protobufjs can't
+// distinguish "published as in-transit" from "not published at all" unless
+// we check own-property presence before decoding. Raw wire counts of
+// entities that actually publish it: MNR 44/227, subway ACE 38/76, LIRR
+// 60/60 - treating the default as data fabricates status for the rest.
+function presenceStatus(vehicle: VehiclePosition | undefined): Arrival['status'] {
+  if (!vehicle || !Object.prototype.hasOwnProperty.call(vehicle, 'currentStatus')) return null;
+  return toStopStatus(vehicle.currentStatus);
+}
+
+// VehicleDescriptor.label defaults to '' when absent in proto2, same
+// ambiguity as currentStatus - presence-check it too.
+function presenceTrainNumber(vehicle: VehiclePosition | undefined): string | null {
+  if (!vehicle?.vehicle || !Object.prototype.hasOwnProperty.call(vehicle.vehicle, 'label')) return null;
+  return vehicle.vehicle.label ?? null;
+}
+
+// StopTimeEvent.delay defaults to 0 when absent in proto2, indistinguishable
+// from a genuine on-time (0s) delay without a presence check.
+function presenceDelay(event: { delay?: number } | undefined): number | null {
+  if (!event || !Object.prototype.hasOwnProperty.call(event, 'delay')) return null;
+  return event.delay ?? null;
+}
+
+/**
+ * The vehicle for a trip update's entity. MNR carries tripUpdate and vehicle
+ * together on the SAME entity (226/226), and its vehicle.trip.tripId never
+ * matches the tripUpdate's trip id, so a same-entity check must run before
+ * the cross-entity map (LIRR is the opposite: 0 shared entities, 121
+ * trip-only / 60 vehicle-only, so it needs the map).
+ */
+function resolveVehicle(
+  entity: FeedMessage['entity'][number],
+  tripId: string,
+  vehicleByTripId: Map<string, VehiclePosition>,
+): VehiclePosition | undefined {
+  return entity.vehicle ?? vehicleByTripId.get(tripId);
+}
+
+/** Subway platform IDs encode direction as an `N`/`S` suffix on the parent ID. */
+function directionFromPlatformId(stopId: string): 'NORTH' | 'SOUTH' | null {
+  if (stopId.endsWith('N')) return 'NORTH';
+  if (stopId.endsWith('S')) return 'SOUTH';
+  return null;
 }
 
 export async function getArrivalsForStop(
   stopId: string,
   limit: number,
   feedId: FeedId,
-  routeFilter?: string[]
+  routeFilter?: string[],
+  directionFilter?: 'NORTH' | 'SOUTH',
 ): Promise<ArrivalResponse> {
   const stop = resolveStop(stopId, feedId);
   const platformIds = resolvePlatformIds(stop.feed_id, stop.stop_id);
@@ -63,7 +109,7 @@ export async function getArrivalsForStop(
   const now = Math.floor(Date.now() / 1000);
   // Route names are attached after the window is chosen, so the collection
   // phase carries only what the realtime feed itself provides.
-  const matched: RawArrival[] = [];
+  const matched: CollectedArrival[] = [];
   let overallStale = false;
   let overallFeedError: string | undefined;
 
@@ -85,12 +131,15 @@ export async function getArrivalsForStop(
       overallFeedError = feed_error;
     }
 
-    // Index vehicle status by trip id once per feed message so the inner
+    // Index vehicle positions by trip id once per feed message so the inner
     // arrivals loop is O(1) per lookup instead of rescanning all entities.
-    const statusByTripId = new Map<string, unknown>();
+    // This covers LIRR/subway, where the vehicle lives on a *different*
+    // entity than the trip update (0 shared entities for LIRR: 121
+    // trip-only, 60 vehicle-only).
+    const vehicleByTripId = new Map<string, VehiclePosition>();
     for (const entity of feedMessage.entity) {
       const tripId = entity.vehicle?.trip?.tripId;
-      if (tripId) statusByTripId.set(tripId, entity.vehicle?.currentStatus);
+      if (tripId) vehicleByTripId.set(tripId, entity.vehicle as VehiclePosition);
     }
 
     for (const entity of feedMessage.entity) {
@@ -99,28 +148,66 @@ export async function getArrivalsForStop(
 
       if (routeFilter && !routeFilter.includes(trip.routeId)) continue;
 
+      // Computed once per entity, not per matched stop time update.
+      const vehicle = resolveVehicle(entity, trip.tripId, vehicleByTripId);
+      const status = presenceStatus(vehicle);
+      const trainNumber = presenceTrainNumber(vehicle);
+      // The LAST stop time update is the true terminus in all three feeds,
+      // with no truncation - ACE carries up to 40 updates resolving to only
+      // 9 distinct real terminals.
+      const destinationRawStopId = stopTimeUpdate[stopTimeUpdate.length - 1]?.stopId ?? null;
+
+      // LIRR direction_id is branch-relative, not compass - a "Penn
+      // Station" trip with direction_id=1 means inbound, not south.
+      // own-property-guarded: optional uint32 defaults to 0 in proto2.
+      let directionId: 0 | 1 | null = null;
+      if (stop.feed_id === 'lirr' && Object.prototype.hasOwnProperty.call(trip, 'directionId')) {
+        if (trip.directionId === 0 || trip.directionId === 1) directionId = trip.directionId;
+      }
+
       for (const stu of stopTimeUpdate) {
         if (!platformIds.includes(stu.stopId)) continue;
-        if (!stu.arrival) continue;
 
-        const arrivalTime = toNumber(stu.arrival.time);
-        if (arrivalTime <= now) continue;
+        const refRaw = stu.arrival?.time ?? stu.departure?.time;
+        if (!refRaw) continue;
+        const refTime = toNumber(refRaw);
+        if (refTime <= now) continue;
 
-        const status = toStopStatus(statusByTripId.get(trip.tripId));
+        const arrivalTime = stu.arrival ? toNumber(stu.arrival.time) : null;
+        const departureTime = stu.departure ? toNumber(stu.departure.time) : null;
+        const delaySeconds = presenceDelay(stu.arrival) ?? presenceDelay(stu.departure);
+
+        // Subway direction is the matched platform suffix, full stop - free,
+        // 100% coverage, no proto2-default ambiguity. Deliberately not the
+        // NYCT direction enum (absent on 46% of updates and indistinguishable
+        // from NORTH when absent).
+        const direction = stop.feed_id === 'subway' ? directionFromPlatformId(stu.stopId) : null;
+        if (directionFilter && direction !== directionFilter) continue;
+        const directionSource: Arrival['direction_source'] =
+          direction !== null ? 'stop_suffix' : directionId !== null ? 'rt_direction_id' : null;
 
         matched.push({
           feed_id: stop.feed_id,
           route_id: trip.routeId,
           trip_id: trip.tripId,
           arrival_time: arrivalTime,
-          arrival_in_seconds: arrivalTime - now,
+          arrival_in_seconds: arrivalTime !== null ? arrivalTime - now : null,
+          departure_time: departureTime,
+          departure_in_seconds: departureTime !== null ? departureTime - now : null,
+          delay_seconds: delaySeconds,
+          destination_raw_stop_id: destinationRawStopId,
+          direction,
+          direction_id: directionId,
+          direction_source: directionSource,
+          train_number: trainNumber,
           status,
+          source: 'realtime',
         });
       }
     }
   }
 
-  matched.sort((a, b) => a.arrival_time - b.arrival_time);
+  matched.sort((a, b) => (a.arrival_time ?? a.departure_time ?? 0) - (b.arrival_time ?? b.departure_time ?? 0));
 
   return {
     feed_id: stop.feed_id,
@@ -129,11 +216,39 @@ export async function getArrivalsForStop(
     generated_at: now,
     stale: overallStale,
     ...(overallFeedError ? { feed_error: overallFeedError } : {}),
-    arrivals: withRouteNames(stop.feed_id, matched.slice(0, limit)),
+    arrivals: withRouteNames(stop.feed_id, withDestinationNames(stop.feed_id, matched.slice(0, limit))),
   };
 }
 
+// Collected before route/destination names are resolved: carries the raw
+// terminus stop id so it can be batch-resolved once, mirroring route
+// resolution below.
+type CollectedArrival = Omit<Arrival, 'route_name' | 'route_long_name' | 'destination_stop_id' | 'destination'> & {
+  destination_raw_stop_id: string | null;
+};
+
 type RawArrival = Omit<Arrival, 'route_name' | 'route_long_name'>;
+
+/**
+ * Resolve destination names in one batched query over the distinct termini,
+ * mirroring `withRouteNames`. Subway platform ids (e.g. `A02N`) resolve to
+ * their parent station so the name is the station, not the platform.
+ */
+function withDestinationNames(feedId: FeedId, arrivals: CollectedArrival[]): RawArrival[] {
+  const distinctIds = Array.from(
+    new Set(arrivals.map((a) => a.destination_raw_stop_id).filter((id): id is string => id !== null)),
+  );
+  const namesById = getStopNamesByIds(feedId, distinctIds);
+
+  return arrivals.map(({ destination_raw_stop_id, ...rest }) => {
+    const resolved = destination_raw_stop_id ? namesById.get(destination_raw_stop_id) : undefined;
+    return {
+      ...rest,
+      destination_stop_id: resolved?.stop_id ?? destination_raw_stop_id,
+      destination: resolved?.stop_name ?? null,
+    };
+  });
+}
 
 /**
  * Resolve every distinct route in one query, then label each arrival.
@@ -148,14 +263,11 @@ function withRouteNames(feedId: FeedId, arrivals: RawArrival[]): Arrival[] {
     getRoutesByIds(feedId, distinctIds).map((row) => [row.route_id, row]),
   );
 
-  return arrivals.map(({ feed_id, route_id, trip_id, arrival_time, arrival_in_seconds, status }) => ({
+  return arrivals.map(({ feed_id, route_id, ...rest }) => ({
     feed_id,
     route_id,
     ...toRouteNames(route_id, rowById.get(route_id)),
-    trip_id,
-    arrival_time,
-    arrival_in_seconds,
-    status,
+    ...rest,
   }));
 }
 
@@ -240,63 +352,4 @@ export class NotFoundError extends Error {
     super(message);
     this.name = 'NotFoundError';
   }
-}
-
-export function getRelevantServiceDates(now: Date = new Date()): ServiceDateFilter[] {
-  const current = getNyDateParts(now);
-  const serviceDates: ServiceDateFilter[] = [
-    {
-      date: current.date,
-      weekdayColumn: current.weekdayColumn,
-    },
-  ];
-
-  // GTFS service days often extend past midnight via 24+ hour stop_times.
-  if (current.hour < 5) {
-    const previous = getNyDateParts(new Date(now.getTime() - 24 * 60 * 60 * 1000));
-    if (previous.date !== current.date) {
-      serviceDates.push({
-        date: previous.date,
-        weekdayColumn: previous.weekdayColumn,
-      });
-    }
-  }
-
-  return serviceDates;
-}
-
-export function getNyDateParts(date: Date): {
-  date: string;
-  weekdayColumn: WeekdayColumn;
-  hour: number;
-} {
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone: 'America/New_York',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    hourCycle: 'h23',
-    weekday: 'long',
-  }).formatToParts(date);
-
-  const year = getDatePart(parts, 'year');
-  const month = getDatePart(parts, 'month');
-  const day = getDatePart(parts, 'day');
-  const hour = Number(getDatePart(parts, 'hour'));
-  const weekday = getDatePart(parts, 'weekday').toLowerCase() as WeekdayColumn;
-
-  return {
-    date: `${year}${month}${day}`,
-    weekdayColumn: weekday,
-    hour,
-  };
-}
-
-function getDatePart(parts: Intl.DateTimeFormatPart[], type: Intl.DateTimeFormatPartTypes): string {
-  const part = parts.find((entry) => entry.type === type);
-  if (!part) {
-    throw new Error(`Missing date part: ${type}`);
-  }
-  return part.value;
 }

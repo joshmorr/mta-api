@@ -127,6 +127,12 @@
             "items": {
               "$ref": "#/components/schemas/PlatformDetail"
             }
+          },
+          "transfers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TransferDetail"
+            }
           }
         },
         "required": [
@@ -135,7 +141,8 @@
           "stop_name",
           "lat",
           "lon",
-          "platforms"
+          "platforms",
+          "transfers"
         ]
       },
       "PlatformDetail": {
@@ -151,6 +158,54 @@
         "required": [
           "stop_id",
           "direction"
+        ]
+      },
+      "TransferDetail": {
+        "type": "object",
+        "properties": {
+          "to_stop_id": {
+            "type": "string"
+          },
+          "to_stop_name": {
+            "type": "string"
+          },
+          "transfer_type": {
+            "type": "integer",
+            "nullable": true,
+            "description": "0 recommended, 1 timed (vehicle guaranteed to wait), 2 requires min_transfer_time, 3 not possible."
+          },
+          "min_transfer_time": {
+            "type": "integer",
+            "nullable": true
+          },
+          "from_route_id": {
+            "type": "string",
+            "nullable": true,
+            "description": "MNR only; null on subway/LIRR."
+          },
+          "to_route_id": {
+            "type": "string",
+            "nullable": true
+          },
+          "from_trip_id": {
+            "type": "string",
+            "nullable": true,
+            "description": "LIRR/MNR only; null on subway."
+          },
+          "to_trip_id": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "to_stop_id",
+          "to_stop_name",
+          "transfer_type",
+          "min_transfer_time",
+          "from_route_id",
+          "to_route_id",
+          "from_trip_id",
+          "to_trip_id"
         ]
       },
       "RouteListResponse": {
@@ -220,9 +275,6 @@
           "stop_name": {
             "type": "string"
           },
-          "direction": {
-            "type": "string"
-          },
           "generated_at": {
             "type": "number",
             "description": "Unix timestamp when the feed was generated"
@@ -282,17 +334,98 @@
           },
           "arrival_time": {
             "type": "number",
-            "description": "Unix timestamp of arrival"
+            "nullable": true,
+            "description": "Unix timestamp of arrival, or null for departure-only updates"
           },
           "arrival_in_seconds": {
-            "type": "number"
+            "type": "number",
+            "nullable": true
+          },
+          "departure_time": {
+            "type": "number",
+            "nullable": true,
+            "description": "Unix timestamp of departure, or null if not published"
+          },
+          "departure_in_seconds": {
+            "type": "number",
+            "nullable": true
+          },
+          "delay_seconds": {
+            "type": "number",
+            "nullable": true,
+            "description": "Seconds late (positive) or early (negative); null if not published"
+          },
+          "destination_stop_id": {
+            "type": "string",
+            "nullable": true,
+            "description": "The trip's true terminus - the last stop time update in the feed"
+          },
+          "destination": {
+            "type": "string",
+            "nullable": true,
+            "description": "Display name of destination_stop_id",
+            "example": "Penn Station"
+          },
+          "direction": {
+            "type": "string",
+            "nullable": true,
+            "enum": [
+              "NORTH",
+              "SOUTH",
+              null
+            ],
+            "description": "Compass direction at this station, from the matched platform suffix. Subway only."
+          },
+          "direction_id": {
+            "anyOf": [
+              {
+                "type": "number",
+                "enum": [
+                  0
+                ]
+              },
+              {
+                "type": "number",
+                "enum": [
+                  1
+                ]
+              },
+              {
+                "nullable": true
+              }
+            ],
+            "description": "Branch-relative direction as published by LIRR - not a compass direction. LIRR only."
+          },
+          "direction_source": {
+            "type": "string",
+            "nullable": true,
+            "enum": [
+              "stop_suffix",
+              "rt_direction_id",
+              null
+            ]
+          },
+          "train_number": {
+            "type": "string",
+            "nullable": true,
+            "description": "LIRR/MNR train number",
+            "example": "2306"
           },
           "status": {
             "type": "string",
+            "nullable": true,
             "enum": [
               "INCOMING_AT",
               "STOPPED_AT",
-              "IN_TRANSIT_TO"
+              "IN_TRANSIT_TO",
+              null
+            ],
+            "description": "Vehicle status, or null if this feed doesn't publish it for this trip"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "realtime"
             ]
           }
         },
@@ -304,7 +437,17 @@
           "trip_id",
           "arrival_time",
           "arrival_in_seconds",
-          "status"
+          "departure_time",
+          "departure_in_seconds",
+          "delay_seconds",
+          "destination_stop_id",
+          "destination",
+          "direction",
+          "direction_id",
+          "direction_source",
+          "train_number",
+          "status",
+          "source"
         ]
       },
       "VehicleListResponse": {
@@ -566,6 +709,428 @@
           "last_synced",
           "stop_count",
           "route_count"
+        ]
+      },
+      "ScheduleResponse": {
+        "type": "object",
+        "properties": {
+          "feed_id": {
+            "type": "string",
+            "enum": [
+              "subway",
+              "lirr",
+              "mnr"
+            ],
+            "description": "Transit feed identifier",
+            "example": "subway"
+          },
+          "stop_id": {
+            "type": "string"
+          },
+          "stop_name": {
+            "type": "string"
+          },
+          "to_stop_id": {
+            "type": "string",
+            "nullable": true
+          },
+          "to_stop_name": {
+            "type": "string",
+            "nullable": true
+          },
+          "service_dates": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The service dates actually queried, in query order."
+          },
+          "generated_at": {
+            "type": "number"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "scheduled"
+            ]
+          },
+          "departures": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ScheduledDeparture"
+            }
+          },
+          "next_after": {
+            "type": "number",
+            "nullable": true,
+            "description": "Cursor for the next page (unix seconds), or null on a non-full page."
+          }
+        },
+        "required": [
+          "feed_id",
+          "stop_id",
+          "stop_name",
+          "to_stop_id",
+          "to_stop_name",
+          "service_dates",
+          "generated_at",
+          "source",
+          "departures",
+          "next_after"
+        ]
+      },
+      "ScheduledDeparture": {
+        "type": "object",
+        "properties": {
+          "feed_id": {
+            "type": "string",
+            "enum": [
+              "subway",
+              "lirr",
+              "mnr"
+            ],
+            "description": "Transit feed identifier",
+            "example": "subway"
+          },
+          "trip_id": {
+            "type": "string"
+          },
+          "route_id": {
+            "type": "string",
+            "description": "Internal GTFS route identifier. Not a display label — on LIRR and Metro-North it is an opaque number (\"4\" is the Ronkonkoma Branch). Use `route_name` when showing this to a user.",
+            "example": "4"
+          },
+          "route_name": {
+            "type": "string",
+            "description": "Rider-facing name for the route: the subway bullet (\"A\", \"7\") or the commuter-rail branch (\"Ronkonkoma Branch\"). Never empty — falls back to `route_id` if the schedule names no route.",
+            "example": "Ronkonkoma Branch"
+          },
+          "route_long_name": {
+            "type": "string",
+            "description": "Longer route name where one exists, otherwise the same value as `route_name`.",
+            "example": "Ronkonkoma Branch"
+          },
+          "service_id": {
+            "type": "string"
+          },
+          "service_date": {
+            "type": "string",
+            "description": "YYYYMMDD service date this row's timestamps were computed against.",
+            "example": "20260810"
+          },
+          "stop_id": {
+            "type": "string"
+          },
+          "stop_sequence": {
+            "type": "integer"
+          },
+          "arrival_time": {
+            "type": "string",
+            "nullable": true,
+            "description": "Raw GTFS HH:MM:SS, or null if this stop_time has no arrival."
+          },
+          "departure_time": {
+            "type": "string"
+          },
+          "arrival_timestamp": {
+            "type": "number",
+            "nullable": true,
+            "description": "Unix timestamp, or null only when arrival_time is null."
+          },
+          "departure_timestamp": {
+            "type": "number"
+          },
+          "departure_in_seconds": {
+            "type": "number"
+          },
+          "headsign": {
+            "type": "string",
+            "nullable": true
+          },
+          "train_number": {
+            "type": "string",
+            "nullable": true,
+            "description": "LIRR/MNR train number (trip_short_name); null on subway."
+          },
+          "direction_id": {
+            "anyOf": [
+              {
+                "type": "number",
+                "enum": [
+                  0
+                ]
+              },
+              {
+                "type": "number",
+                "enum": [
+                  1
+                ]
+              },
+              {
+                "nullable": true
+              }
+            ],
+            "description": "Static GTFS direction_id, as published - not derived or inferred."
+          },
+          "track": {
+            "type": "string",
+            "nullable": true
+          },
+          "peak": {
+            "type": "boolean",
+            "nullable": true,
+            "description": "LIRR/MNR fare period; null on subway, which has no such concept."
+          },
+          "pickup_type": {
+            "type": "integer",
+            "nullable": true
+          },
+          "drop_off_type": {
+            "type": "integer",
+            "nullable": true
+          },
+          "destination": {
+            "$ref": "#/components/schemas/ScheduledDepartureDestination"
+          }
+        },
+        "required": [
+          "feed_id",
+          "trip_id",
+          "route_id",
+          "route_name",
+          "route_long_name",
+          "service_id",
+          "service_date",
+          "stop_id",
+          "stop_sequence",
+          "arrival_time",
+          "departure_time",
+          "arrival_timestamp",
+          "departure_timestamp",
+          "departure_in_seconds",
+          "headsign",
+          "train_number",
+          "direction_id",
+          "track",
+          "peak",
+          "pickup_type",
+          "drop_off_type"
+        ]
+      },
+      "ScheduledDepartureDestination": {
+        "type": "object",
+        "properties": {
+          "stop_id": {
+            "type": "string"
+          },
+          "stop_name": {
+            "type": "string"
+          },
+          "stop_sequence": {
+            "type": "integer"
+          },
+          "arrival_time": {
+            "type": "string",
+            "nullable": true
+          },
+          "arrival_timestamp": {
+            "type": "number",
+            "nullable": true
+          },
+          "duration_seconds": {
+            "type": "number",
+            "nullable": true,
+            "description": "Seconds between this departure and the arrival at `to`."
+          }
+        },
+        "required": [
+          "stop_id",
+          "stop_name",
+          "stop_sequence",
+          "arrival_time",
+          "arrival_timestamp",
+          "duration_seconds"
+        ],
+        "description": "Present only when `to` was given."
+      },
+      "TripScheduleResponse": {
+        "type": "object",
+        "properties": {
+          "feed_id": {
+            "type": "string",
+            "enum": [
+              "subway",
+              "lirr",
+              "mnr"
+            ],
+            "description": "Transit feed identifier",
+            "example": "subway"
+          },
+          "trip_id": {
+            "type": "string",
+            "description": "The trip_id as requested."
+          },
+          "resolved_trip_id": {
+            "type": "string",
+            "description": "The static trip_id this response actually describes - equals `trip_id` unless `matched_by` is `rt_trip_id_suffix`."
+          },
+          "matched_by": {
+            "type": "string",
+            "enum": [
+              "exact",
+              "rt_trip_id_suffix"
+            ]
+          },
+          "route_id": {
+            "type": "string",
+            "description": "Internal GTFS route identifier. Not a display label — on LIRR and Metro-North it is an opaque number (\"4\" is the Ronkonkoma Branch). Use `route_name` when showing this to a user.",
+            "example": "4"
+          },
+          "route_name": {
+            "type": "string",
+            "description": "Rider-facing name for the route: the subway bullet (\"A\", \"7\") or the commuter-rail branch (\"Ronkonkoma Branch\"). Never empty — falls back to `route_id` if the schedule names no route.",
+            "example": "Ronkonkoma Branch"
+          },
+          "route_long_name": {
+            "type": "string",
+            "description": "Longer route name where one exists, otherwise the same value as `route_name`.",
+            "example": "Ronkonkoma Branch"
+          },
+          "service_id": {
+            "type": "string"
+          },
+          "service_date": {
+            "type": "string",
+            "nullable": true,
+            "description": "YYYYMMDD service date timestamps were computed against, or null when no candidate date had this trip's service active - every stop's *_timestamp is then also null, but *_time (raw HH:MM:SS) is still populated."
+          },
+          "direction_id": {
+            "anyOf": [
+              {
+                "type": "number",
+                "enum": [
+                  0
+                ]
+              },
+              {
+                "type": "number",
+                "enum": [
+                  1
+                ]
+              },
+              {
+                "nullable": true
+              }
+            ]
+          },
+          "headsign": {
+            "type": "string",
+            "nullable": true
+          },
+          "train_number": {
+            "type": "string",
+            "nullable": true
+          },
+          "peak": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "scheduled"
+            ]
+          },
+          "origin": {
+            "$ref": "#/components/schemas/TripStop"
+          },
+          "destination": {
+            "$ref": "#/components/schemas/TripStop"
+          },
+          "stops": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TripStop"
+            }
+          }
+        },
+        "required": [
+          "feed_id",
+          "trip_id",
+          "resolved_trip_id",
+          "matched_by",
+          "route_id",
+          "route_name",
+          "route_long_name",
+          "service_id",
+          "service_date",
+          "direction_id",
+          "headsign",
+          "train_number",
+          "peak",
+          "source",
+          "origin",
+          "destination",
+          "stops"
+        ]
+      },
+      "TripStop": {
+        "type": "object",
+        "properties": {
+          "stop_id": {
+            "type": "string"
+          },
+          "stop_name": {
+            "type": "string"
+          },
+          "parent_station_id": {
+            "type": "string",
+            "nullable": true
+          },
+          "stop_sequence": {
+            "type": "integer"
+          },
+          "arrival_time": {
+            "type": "string",
+            "nullable": true
+          },
+          "departure_time": {
+            "type": "string",
+            "nullable": true
+          },
+          "arrival_timestamp": {
+            "type": "number",
+            "nullable": true
+          },
+          "departure_timestamp": {
+            "type": "number",
+            "nullable": true
+          },
+          "track": {
+            "type": "string",
+            "nullable": true
+          },
+          "pickup_type": {
+            "type": "integer",
+            "nullable": true
+          },
+          "drop_off_type": {
+            "type": "integer",
+            "nullable": true
+          }
+        },
+        "required": [
+          "stop_id",
+          "stop_name",
+          "parent_station_id",
+          "stop_sequence",
+          "arrival_time",
+          "departure_time",
+          "arrival_timestamp",
+          "departure_timestamp",
+          "track",
+          "pickup_type",
+          "drop_off_type"
         ]
       }
     },
@@ -931,6 +1496,20 @@
             "description": "Comma-separated route IDs to filter by",
             "name": "routes",
             "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "NORTH",
+                "SOUTH"
+              ],
+              "description": "Filter to arrivals in this compass direction. Subway only - LIRR/MNR arrivals never carry a direction, so this excludes them entirely."
+            },
+            "required": false,
+            "description": "Filter to arrivals in this compass direction. Subway only - LIRR/MNR arrivals never carry a direction, so this excludes them entirely.",
+            "name": "direction",
+            "in": "query"
           }
         ],
         "responses": {
@@ -1145,6 +1724,208 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/schedule": {
+      "get": {
+        "tags": [
+          "Schedule"
+        ],
+        "operationId": "getSchedule",
+        "summary": "Get the static timetable for a stop",
+        "description": "Returns scheduled departures from a stop, sourced from the static GTFS timetable (not realtime). Unlike /arrivals, results are unaffected by feed outages and extend arbitrarily far into the future. Provide `to` to filter to departures that reach a specific destination stop, with duration_seconds included.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "description": "Stop ID",
+              "example": "44"
+            },
+            "required": true,
+            "description": "Stop ID",
+            "name": "stop",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "subway",
+                "lirr",
+                "mnr"
+              ],
+              "description": "Feed the stop belongs to"
+            },
+            "required": true,
+            "description": "Feed the stop belongs to",
+            "name": "feed",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "description": "Destination stop ID to filter departures by",
+              "example": "237"
+            },
+            "required": false,
+            "description": "Destination stop ID to filter departures by",
+            "name": "to",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "nullable": true,
+              "minimum": 0,
+              "description": "Unix seconds cursor - only departures at or after this instant are returned. Defaults to now, or the start of `date` if `date` is given without `after`.",
+              "example": 1754651400
+            },
+            "required": false,
+            "description": "Unix seconds cursor - only departures at or after this instant are returned. Defaults to now, or the start of `date` if `date` is given without `after`.",
+            "name": "after",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{8}$",
+              "description": "Pin the query to a single YYYYMMDD service date instead of the default 3-day [yesterday, today, tomorrow] window - gives the whole day's timetable when `after` is also omitted.",
+              "example": "20260810"
+            },
+            "required": false,
+            "description": "Pin the query to a single YYYYMMDD service date instead of the default 3-day [yesterday, today, tomorrow] window - gives the whole day's timetable when `after` is also omitted.",
+            "name": "date",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "exclusiveMinimum": true,
+              "default": 20,
+              "description": "Max departures to return (clamped to 100, default 20)",
+              "example": 20
+            },
+            "required": false,
+            "description": "Max departures to return (clamped to 100, default 20)",
+            "name": "limit",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Scheduled departures",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScheduleResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid parameters",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Stop (or destination stop) not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/trips/{trip_id}": {
+      "get": {
+        "tags": [
+          "Schedule"
+        ],
+        "operationId": "getTrip",
+        "summary": "Get the static schedule for a trip",
+        "description": "Resolves a trip_id - typically read off /arrivals or /schedule - to its full static stop-by-stop timetable. LIRR trip IDs must match exactly. Subway realtime trip IDs are frequently a suffix of the static ID and are resolved via a fallback match narrowed to the active service window. Metro-North realtime trip IDs cannot be resolved to a static trip at all - the two ID schemes are unrelated for that feed, so /arrivals-sourced MNR trip IDs will 404 here.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "description": "Trip ID, as returned by /arrivals or /schedule",
+              "example": "GO201_26_2701"
+            },
+            "required": true,
+            "description": "Trip ID, as returned by /arrivals or /schedule",
+            "name": "trip_id",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "subway",
+                "lirr",
+                "mnr"
+              ],
+              "description": "Feed the trip belongs to"
+            },
+            "required": true,
+            "description": "Feed the trip belongs to",
+            "name": "feed",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{8}$",
+              "description": "YYYYMMDD service date to compute timestamps against. Defaults to the first of [yesterday, today, tomorrow] the trip's service is active on; if none are, timestamps are null and raw HH:MM:SS times are returned instead.",
+              "example": "20260810"
+            },
+            "required": false,
+            "description": "YYYYMMDD service date to compute timestamps against. Defaults to the first of [yesterday, today, tomorrow] the trip's service is active on; if none are, timestamps are null and raw HH:MM:SS times are returned instead.",
+            "name": "date",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Trip schedule",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TripScheduleResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid parameters",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Trip not found (or unresolvable, for MNR)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }

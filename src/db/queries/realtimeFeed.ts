@@ -1,19 +1,11 @@
 import { db } from '../client';
 import type { FeedId } from '../../types/gtfs';
+import { activeServicePredicate, type ServiceDateFilter, type WeekdayColumn } from './serviceCalendar';
 
-export type WeekdayColumn =
-  | 'monday'
-  | 'tuesday'
-  | 'wednesday'
-  | 'thursday'
-  | 'friday'
-  | 'saturday'
-  | 'sunday';
-
-export type ServiceDateFilter = {
-  date: string;
-  weekdayColumn: WeekdayColumn;
-};
+// Re-exported so existing imports of these two types from this module keep
+// compiling — the definitions now live in serviceCalendar.ts alongside the
+// predicate that uses them.
+export type { ServiceDateFilter, WeekdayColumn };
 
 export function getStopNameById(feedId: FeedId, stopId: string): string | null {
   const row = db
@@ -33,15 +25,11 @@ export function getServedRouteIdsByStopIds(
   if (!stopIds.length) return [];
 
   const placeholders = stopIds.map(() => '?').join(',');
-  const serviceDateSql = serviceDates.length
-    ? ` AND (${serviceDates.map((serviceDate) => getActiveServiceSql(serviceDate.weekdayColumn)).join(' OR ')})`
+  const predicates = serviceDates.map((serviceDate) => activeServicePredicate('t', serviceDate));
+  const serviceDateSql = predicates.length
+    ? ` AND (${predicates.map((p) => p.sql).join(' OR ')})`
     : '';
-  const serviceDateParams = serviceDates.flatMap((serviceDate) => [
-    serviceDate.date,
-    serviceDate.date,
-    serviceDate.date,
-    serviceDate.date,
-  ]);
+  const serviceDateParams = predicates.flatMap((p) => p.params);
   const rows = db
     .query<{ route_id: string }, Array<string>>(
       `SELECT DISTINCT t.route_id
@@ -52,38 +40,6 @@ export function getServedRouteIdsByStopIds(
     .all(feedId, ...stopIds, ...serviceDateParams);
 
   return rows.map((r) => r.route_id);
-}
-
-function getActiveServiceSql(weekdayColumn: WeekdayColumn): string {
-  return `(
-    EXISTS (
-      SELECT 1
-      FROM calendar_dates cd_added
-      WHERE cd_added.feed_id = t.feed_id
-        AND cd_added.service_id = t.service_id
-        AND cd_added.date = ?
-        AND cd_added.exception_type = 1
-    )
-    OR (
-      EXISTS (
-        SELECT 1
-        FROM calendar c
-        WHERE c.feed_id = t.feed_id
-          AND c.service_id = t.service_id
-          AND c.start_date <= ?
-          AND c.end_date >= ?
-          AND c.${weekdayColumn} = 1
-      )
-      AND NOT EXISTS (
-        SELECT 1
-        FROM calendar_dates cd_removed
-        WHERE cd_removed.feed_id = t.feed_id
-          AND cd_removed.service_id = t.service_id
-          AND cd_removed.date = ?
-          AND cd_removed.exception_type = 2
-      )
-    )
-  )`;
 }
 
 export function isPlatformStop(feedId: FeedId, stopId: string): boolean {

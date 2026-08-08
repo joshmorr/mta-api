@@ -6,8 +6,11 @@ import type {
   GtfsRoute,
   GtfsStop,
   GtfsStopTime,
+  GtfsTransfer,
   GtfsTrip,
 } from '../../types/gtfs';
+import { toIntOrNull } from '../../utils/gtfsParse';
+import { toGtfsSeconds } from '../../utils/serviceDate';
 
 const BATCH_SIZE = 1000;
 
@@ -19,26 +22,35 @@ export function clearFeedData(feedId: FeedId) {
     db.run(`DELETE FROM calendar WHERE feed_id = ?`, [feedId]);
     db.run(`DELETE FROM routes WHERE feed_id = ?`, [feedId]);
     db.run(`DELETE FROM stops WHERE feed_id = ?`, [feedId]);
+    db.run(`DELETE FROM transfers WHERE feed_id = ?`, [feedId]);
   })();
 }
 
 export function upsertStops(rows: GtfsStop[], feedId: FeedId) {
   const stmt = db.prepare(
-    `INSERT OR REPLACE INTO stops (feed_id, stop_id, stop_name, stop_lat, stop_lon, location_type, parent_station)
-     VALUES ($feed_id, $stop_id, $stop_name, $stop_lat, $stop_lon, $location_type, $parent_station)`
+    `INSERT OR REPLACE INTO stops
+       (feed_id, stop_id, stop_name, stop_lat, stop_lon, location_type, parent_station,
+        stop_code, stop_desc, zone_id, wheelchair_boarding)
+     VALUES
+       ($feed_id, $stop_id, $stop_name, $stop_lat, $stop_lon, $location_type, $parent_station,
+        $stop_code, $stop_desc, $zone_id, $wheelchair_boarding)`
   );
   db.transaction(() => {
     for (let i = 0; i < rows.length; i += BATCH_SIZE) {
       for (const r of rows.slice(i, i + BATCH_SIZE)) {
         if (!r.stop_id) continue;
         stmt.run({
-          $feed_id:        feedId,
-          $stop_id:        r.stop_id,
-          $stop_name:      r.stop_name || r.stop_id,
-          $stop_lat:       parseFloat(r.stop_lat) || null,
-          $stop_lon:       parseFloat(r.stop_lon) || null,
-          $location_type:  parseInt(r.location_type) || 0,
-          $parent_station: r.parent_station || null,
+          $feed_id:             feedId,
+          $stop_id:             r.stop_id,
+          $stop_name:           r.stop_name || r.stop_id,
+          $stop_lat:            parseFloat(r.stop_lat) || null,
+          $stop_lon:            parseFloat(r.stop_lon) || null,
+          $location_type:       parseInt(r.location_type) || 0,
+          $parent_station:      r.parent_station || null,
+          $stop_code:           r.stop_code || null,
+          $stop_desc:           r.stop_desc || null,
+          $zone_id:             r.zone_id || null,
+          $wheelchair_boarding: toIntOrNull(r.wheelchair_boarding),
         });
       }
     }
@@ -47,20 +59,28 @@ export function upsertStops(rows: GtfsStop[], feedId: FeedId) {
 
 export function upsertRoutes(rows: GtfsRoute[], feedId: FeedId) {
   const stmt = db.prepare(
-    `INSERT OR REPLACE INTO routes (feed_id, route_id, agency_id, route_short_name, route_long_name, route_color, route_type)
-     VALUES ($feed_id, $route_id, $agency_id, $route_short_name, $route_long_name, $route_color, $route_type)`
+    `INSERT OR REPLACE INTO routes
+       (feed_id, route_id, agency_id, route_short_name, route_long_name, route_color, route_type,
+        route_desc, route_url, route_text_color, route_sort_order)
+     VALUES
+       ($feed_id, $route_id, $agency_id, $route_short_name, $route_long_name, $route_color, $route_type,
+        $route_desc, $route_url, $route_text_color, $route_sort_order)`
   );
   db.transaction(() => {
     for (const r of rows) {
       if (!r.route_id) continue;
       stmt.run({
-        $feed_id:         feedId,
+        $feed_id:          feedId,
         $route_id:         r.route_id,
         $agency_id:        r.agency_id || null,
         $route_short_name: r.route_short_name,
         $route_long_name:  r.route_long_name,
         $route_color:      r.route_color ? `#${r.route_color}` : null,
         $route_type:       parseInt(r.route_type) || 0,
+        $route_desc:       r.route_desc || null,
+        $route_url:        r.route_url || null,
+        $route_text_color: r.route_text_color ? `#${r.route_text_color}` : null,
+        $route_sort_order: toIntOrNull(r.route_sort_order),
       });
     }
   })();
@@ -68,20 +88,29 @@ export function upsertRoutes(rows: GtfsRoute[], feedId: FeedId) {
 
 export function upsertTrips(rows: GtfsTrip[], feedId: FeedId) {
   const stmt = db.prepare(
-    `INSERT OR REPLACE INTO trips (feed_id, trip_id, route_id, service_id, direction_id, shape_id)
-     VALUES ($feed_id, $trip_id, $route_id, $service_id, $direction_id, $shape_id)`
+    `INSERT OR REPLACE INTO trips
+       (feed_id, trip_id, route_id, service_id, direction_id, shape_id,
+        trip_headsign, trip_short_name, block_id, wheelchair_accessible, peak_offpeak)
+     VALUES
+       ($feed_id, $trip_id, $route_id, $service_id, $direction_id, $shape_id,
+        $trip_headsign, $trip_short_name, $block_id, $wheelchair_accessible, $peak_offpeak)`
   );
   db.transaction(() => {
     for (let i = 0; i < rows.length; i += BATCH_SIZE) {
       for (const r of rows.slice(i, i + BATCH_SIZE)) {
         if (!r.trip_id || !r.route_id) continue;
         stmt.run({
-          $feed_id:      feedId,
-          $trip_id:      r.trip_id,
-          $route_id:     r.route_id,
-          $service_id:   r.service_id,
-          $direction_id: parseInt(r.direction_id) || 0,
-          $shape_id:     r.shape_id || null,
+          $feed_id:               feedId,
+          $trip_id:               r.trip_id,
+          $route_id:              r.route_id,
+          $service_id:            r.service_id,
+          $direction_id:          toIntOrNull(r.direction_id),
+          $shape_id:              r.shape_id || null,
+          $trip_headsign:         r.trip_headsign || null,
+          $trip_short_name:       r.trip_short_name || null,
+          $block_id:              r.block_id || null,
+          $wheelchair_accessible: toIntOrNull(r.wheelchair_accessible),
+          $peak_offpeak:          toIntOrNull(r.peak_offpeak),
         });
       }
     }
@@ -90,20 +119,32 @@ export function upsertTrips(rows: GtfsTrip[], feedId: FeedId) {
 
 export function upsertStopTimes(rows: GtfsStopTime[], feedId: FeedId) {
   const stmt = db.prepare(
-    `INSERT OR REPLACE INTO stop_times (feed_id, trip_id, stop_id, arrival_time, departure_time, stop_sequence)
-     VALUES ($feed_id, $trip_id, $stop_id, $arrival_time, $departure_time, $stop_sequence)`
+    `INSERT OR REPLACE INTO stop_times
+       (feed_id, trip_id, stop_id, arrival_time, departure_time, stop_sequence,
+        track, note_id, pickup_type, drop_off_type, arrival_seconds, departure_seconds)
+     VALUES
+       ($feed_id, $trip_id, $stop_id, $arrival_time, $departure_time, $stop_sequence,
+        $track, $note_id, $pickup_type, $drop_off_type, $arrival_seconds, $departure_seconds)`
   );
   db.transaction(() => {
     for (let i = 0; i < rows.length; i += BATCH_SIZE) {
       for (const r of rows.slice(i, i + BATCH_SIZE)) {
         if (!r.trip_id || !r.stop_id) continue;
+        const stopSequence = parseInt(r.stop_sequence);
+        if (Number.isNaN(stopSequence)) continue;
         stmt.run({
-          $feed_id:        feedId,
-          $trip_id:        r.trip_id,
-          $stop_id:        r.stop_id,
-          $arrival_time:   r.arrival_time || null,
-          $departure_time: r.departure_time || null,
-          $stop_sequence:  parseInt(r.stop_sequence) || 0,
+          $feed_id:           feedId,
+          $trip_id:           r.trip_id,
+          $stop_id:           r.stop_id,
+          $arrival_time:      r.arrival_time || null,
+          $departure_time:    r.departure_time || null,
+          $stop_sequence:     stopSequence,
+          $track:             r.track || null,
+          $note_id:           r.note_id || null,
+          $pickup_type:       toIntOrNull(r.pickup_type),
+          $drop_off_type:     toIntOrNull(r.drop_off_type),
+          $arrival_seconds:   toGtfsSeconds(r.arrival_time),
+          $departure_seconds: toGtfsSeconds(r.departure_time),
         });
       }
     }
@@ -116,20 +157,32 @@ export function upsertStopTimes(rows: GtfsStopTime[], feedId: FeedId) {
  */
 export function upsertStopTimesBatch(feedId: FeedId) {
   const stmt = db.prepare(
-    `INSERT OR REPLACE INTO stop_times (feed_id, trip_id, stop_id, arrival_time, departure_time, stop_sequence)
-     VALUES ($feed_id, $trip_id, $stop_id, $arrival_time, $departure_time, $stop_sequence)`
+    `INSERT OR REPLACE INTO stop_times
+       (feed_id, trip_id, stop_id, arrival_time, departure_time, stop_sequence,
+        track, note_id, pickup_type, drop_off_type, arrival_seconds, departure_seconds)
+     VALUES
+       ($feed_id, $trip_id, $stop_id, $arrival_time, $departure_time, $stop_sequence,
+        $track, $note_id, $pickup_type, $drop_off_type, $arrival_seconds, $departure_seconds)`
   );
   const batch: GtfsStopTime[] = [];
 
   const flushBatch = db.transaction(() => {
     for (const r of batch) {
+      const stopSequence = parseInt(r.stop_sequence);
+      if (Number.isNaN(stopSequence)) continue;
       stmt.run({
-        $feed_id:        feedId,
-        $trip_id:        r.trip_id,
-        $stop_id:        r.stop_id,
-        $arrival_time:   r.arrival_time || null,
-        $departure_time: r.departure_time || null,
-        $stop_sequence:  parseInt(r.stop_sequence) || 0,
+        $feed_id:           feedId,
+        $trip_id:           r.trip_id,
+        $stop_id:           r.stop_id,
+        $arrival_time:      r.arrival_time || null,
+        $departure_time:    r.departure_time || null,
+        $stop_sequence:     stopSequence,
+        $track:             r.track || null,
+        $note_id:           r.note_id || null,
+        $pickup_type:       toIntOrNull(r.pickup_type),
+        $drop_off_type:     toIntOrNull(r.drop_off_type),
+        $arrival_seconds:   toGtfsSeconds(r.arrival_time),
+        $departure_seconds: toGtfsSeconds(r.departure_time),
       });
     }
     batch.length = 0;
@@ -188,6 +241,40 @@ export function upsertCalendarDates(rows: GtfsCalendarDate[], feedId: FeedId) {
         $date:           r.date,
         $exception_type: parseInt(r.exception_type) || 0,
       });
+    }
+  })();
+}
+
+/**
+ * `transfers` has no declared PK (see schema.ts), so this is a plain INSERT,
+ * not INSERT OR REPLACE — there is no conflict target, and per-trip rows that
+ * share every other column (common on MNR) must all survive.
+ */
+export function upsertTransfers(rows: GtfsTransfer[], feedId: FeedId) {
+  const stmt = db.prepare(
+    `INSERT INTO transfers
+       (feed_id, from_stop_id, to_stop_id, transfer_type, min_transfer_time,
+        from_route_id, to_route_id, from_trip_id, to_trip_id)
+     VALUES
+       ($feed_id, $from_stop_id, $to_stop_id, $transfer_type, $min_transfer_time,
+        $from_route_id, $to_route_id, $from_trip_id, $to_trip_id)`
+  );
+  db.transaction(() => {
+    for (let i = 0; i < rows.length; i += BATCH_SIZE) {
+      for (const r of rows.slice(i, i + BATCH_SIZE)) {
+        if (!r.from_stop_id || !r.to_stop_id) continue;
+        stmt.run({
+          $feed_id:           feedId,
+          $from_stop_id:      r.from_stop_id,
+          $to_stop_id:        r.to_stop_id,
+          $transfer_type:     toIntOrNull(r.transfer_type),
+          $min_transfer_time: toIntOrNull(r.min_transfer_time),
+          $from_route_id:     r.from_route_id || null,
+          $to_route_id:       r.to_route_id || null,
+          $from_trip_id:      r.from_trip_id || null,
+          $to_trip_id:        r.to_trip_id || null,
+        });
+      }
     }
   })();
 }

@@ -8,6 +8,7 @@ import {
   getPlatformIds,
   getPlatforms,
   getParentId,
+  getTransfersByStopId,
 } from '../../../src/db/queries/stops';
 import { resetDb, seedSubway, seedLirr, seedMnr } from '../../helpers/seed';
 import { db } from '../../../src/db/client';
@@ -186,6 +187,65 @@ describe('db/queries/stops', () => {
 
     it('getParentId returns null when stop is missing', () => {
       expect(getParentId('subway', 'nope')).toBeNull();
+    });
+  });
+
+  describe('getTransfersByStopId', () => {
+    beforeEach(() => seedSubway());
+
+    it('resolves the destination stop_name and returns [] when none exist', () => {
+      expect(getTransfersByStopId('subway', '127')).toEqual([]);
+
+      db.run(
+        `INSERT INTO stops (feed_id, stop_id, stop_name, stop_lat, stop_lon, location_type, parent_station)
+         VALUES ('subway', '902', 'Times Sq-42 St (Shuttle)', 40.7556, -73.9866, 1, NULL)`,
+      );
+      db.run(
+        `INSERT INTO transfers (feed_id, from_stop_id, to_stop_id, transfer_type, min_transfer_time)
+         VALUES ('subway', '127', '902', 2, 180)`,
+      );
+      const rows = getTransfersByStopId('subway', '127');
+      expect(rows).toEqual([
+        {
+          to_stop_id:        '902',
+          to_stop_name:      'Times Sq-42 St (Shuttle)',
+          transfer_type:     2,
+          min_transfer_time: 180,
+          from_route_id:     null,
+          to_route_id:       null,
+          from_trip_id:      null,
+          to_trip_id:        null,
+        },
+      ]);
+    });
+
+    it('falls back to the raw to_stop_id when the destination stop is unknown', () => {
+      db.run(
+        `INSERT INTO transfers (feed_id, from_stop_id, to_stop_id, transfer_type, min_transfer_time)
+         VALUES ('subway', '127', '999', 2, 180)`,
+      );
+      const rows = getTransfersByStopId('subway', '127');
+      expect(rows[0].to_stop_name).toBe('999');
+    });
+
+    it('keeps multiple rows for the same stop pair that differ only by trip', () => {
+      db.run(
+        `INSERT INTO transfers (feed_id, from_stop_id, to_stop_id, from_trip_id, to_trip_id, transfer_type)
+         VALUES
+           ('mnr', '20', '20', 'TRIP_A1', 'TRIP_B1', 1),
+           ('mnr', '20', '20', 'TRIP_A2', 'TRIP_B2', 1)`,
+      );
+      const rows = getTransfersByStopId('mnr', '20');
+      expect(rows).toHaveLength(2);
+      expect(rows.map((r) => r.from_trip_id).sort()).toEqual(['TRIP_A1', 'TRIP_A2']);
+    });
+
+    it('scopes to feed_id and does not leak transfers from another feed', () => {
+      db.run(
+        `INSERT INTO transfers (feed_id, from_stop_id, to_stop_id, transfer_type)
+         VALUES ('lirr', '127', '902', 2)`,
+      );
+      expect(getTransfersByStopId('subway', '127')).toEqual([]);
     });
   });
 
