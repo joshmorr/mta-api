@@ -2,7 +2,9 @@
 
 A REST API over the MTA's GTFS static and realtime feeds. Handles protobuf parsing, feed routing, ZIP extraction, schedule-aware filtering, and stop lookups. Clients receive plain JSON with no knowledge of the underlying MTA feed structure.
 
-**Stack:** [Bun](https://bun.sh) · [Hono](https://hono.dev) · `bun:sqlite` · `protobufjs`  
+The same data is also served as [MCP](#mcp-server) tools over stdio or HTTP, so LLM agents can query it directly.
+
+**Stack:** [Bun](https://bun.sh) · [Hono](https://hono.dev) · `bun:sqlite` · `protobufjs` · [`@modelcontextprotocol/sdk`](https://modelcontextprotocol.io)  
 **No external database. No required API keys.**
 
 ---
