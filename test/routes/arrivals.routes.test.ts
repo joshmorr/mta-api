@@ -112,11 +112,12 @@ describe('GET /arrivals', () => {
       expect(res.status).toBe(200);
       const body = (await res.json()) as {
         stop_id: string;
-        arrivals: Array<{ arrival_in_seconds: number; route_id: string }>;
+        arrivals: Array<{ arrival_in_seconds: number; route_id: string; route_name: string }>;
       };
       expect(body.stop_id).toBe('127');
       expect(body.arrivals).toHaveLength(2);
       expect(body.arrivals[0].arrival_in_seconds).toBeLessThan(body.arrivals[1].arrival_in_seconds);
+      expect(body.arrivals.every((a) => a.route_name === '1')).toBe(true);
     });
 
     it('clamps limit to 50', async () => {

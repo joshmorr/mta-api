@@ -10,7 +10,8 @@ import {
   getStopNameById,
   isPlatformStop,
 } from '../db/queries/realtimeFeed';
-import { findRoutesById } from '../db/queries/routes';
+import { findRoutesById, getRoutesByIds } from '../db/queries/routes';
+import { toRouteNames } from './routes.service';
 import { findStopsById, getParentId } from '../db/queries/stops';
 import { toNumber } from '../utils/realtime';
 
@@ -60,7 +61,9 @@ export async function getArrivalsForStop(
   );
 
   const now = Math.floor(Date.now() / 1000);
-  const arrivals: Arrival[] = [];
+  // Route names are attached after the window is chosen, so the collection
+  // phase carries only what the realtime feed itself provides.
+  const matched: RawArrival[] = [];
   let overallStale = false;
   let overallFeedError: string | undefined;
 
@@ -105,7 +108,7 @@ export async function getArrivalsForStop(
 
         const status = toStopStatus(statusByTripId.get(trip.tripId));
 
-        arrivals.push({
+        matched.push({
           feed_id: stop.feed_id,
           route_id: trip.routeId,
           trip_id: trip.tripId,
@@ -117,7 +120,7 @@ export async function getArrivalsForStop(
     }
   }
 
-  arrivals.sort((a, b) => a.arrival_time - b.arrival_time);
+  matched.sort((a, b) => a.arrival_time - b.arrival_time);
 
   return {
     feed_id: stop.feed_id,
@@ -126,13 +129,41 @@ export async function getArrivalsForStop(
     generated_at: now,
     stale: overallStale,
     ...(overallFeedError ? { feed_error: overallFeedError } : {}),
-    arrivals: arrivals.slice(0, limit),
+    arrivals: withRouteNames(stop.feed_id, matched.slice(0, limit)),
   };
+}
+
+type RawArrival = Omit<Arrival, 'route_name' | 'route_long_name'>;
+
+/**
+ * Resolve every distinct route in one query, then label each arrival.
+ *
+ * `route_id` alone is unusable as a display label: on LIRR and Metro-North it
+ * is an opaque number, so an unlabelled feed leaves a client rendering
+ * "Route 4" where a rider expects "Ronkonkoma Branch".
+ */
+function withRouteNames(feedId: FeedId, arrivals: RawArrival[]): Arrival[] {
+  const distinctIds = Array.from(new Set(arrivals.map((a) => a.route_id)));
+  const rowById = new Map(
+    getRoutesByIds(feedId, distinctIds).map((row) => [row.route_id, row]),
+  );
+
+  return arrivals.map(({ feed_id, route_id, trip_id, arrival_time, arrival_in_seconds, status }) => ({
+    feed_id,
+    route_id,
+    ...toRouteNames(route_id, rowById.get(route_id)),
+    trip_id,
+    arrival_time,
+    arrival_in_seconds,
+    status,
+  }));
 }
 
 export async function getVehiclesForRoute(routeId: string, feedId: FeedId): Promise<{
   feed_id: FeedId;
   route_id: string;
+  route_name: string;
+  route_long_name: string;
   generated_at: number;
   vehicles: VehicleResponse[];
 }> {
@@ -158,7 +189,14 @@ export async function getVehiclesForRoute(routeId: string, feedId: FeedId): Prom
     });
   }
 
-  return { feed_id: route.feed_id, route_id: route.route_id, generated_at: now, vehicles };
+  return {
+    feed_id: route.feed_id,
+    route_id: route.route_id,
+    // `route` is the static row resolveRoute already fetched — no extra query.
+    ...toRouteNames(route.route_id, route),
+    generated_at: now,
+    vehicles,
+  };
 }
 
 function resolvePlatformIds(feedId: FeedId, stopId: string): string[] {

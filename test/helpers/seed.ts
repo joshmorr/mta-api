@@ -49,9 +49,12 @@ export function seedLirr(): void {
        ('lirr', '1', 'Penn Station',     40.7505, -73.9934, 0, NULL),
        ('lirr', '2', 'Jamaica',          40.7000, -73.8090, 0, NULL)`,
   );
+  // route_short_name is NULL to match production: LIRR and MNR publish only a
+  // long name, so the branch name is the sole rider-facing label. A fixture
+  // that fills in a short name hides every bug in the name-fallback path.
   db.run(
     `INSERT INTO routes (feed_id, route_id, agency_id, route_short_name, route_long_name, route_color, route_type)
-     VALUES ('lirr', 'PW', 'LI', 'PW', 'Port Washington Branch', '#00985F', 2)`,
+     VALUES ('lirr', 'PW', 'LI', NULL, 'Port Washington Branch', '#00985F', 2)`,
   );
 }
 
@@ -65,6 +68,6 @@ export function seedMnr(): void {
   );
   db.run(
     `INSERT INTO routes (feed_id, route_id, agency_id, route_short_name, route_long_name, route_color, route_type)
-     VALUES ('mnr', 'HUDSON', 'MNR', 'Hudson', 'Hudson Line', '#009B3A', 2)`,
+     VALUES ('mnr', 'HUDSON', 'MNR', NULL, 'Hudson Line', '#009B3A', 2)`,
   );
 }

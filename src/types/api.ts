@@ -26,6 +26,9 @@ export interface StopDetail {
 export interface Arrival {
   feed_id: FeedId;
   route_id: string;
+  /** Rider-facing label for the route. Show this, not `route_id`. */
+  route_name: string;
+  route_long_name: string;
   trip_id: string;
   arrival_time: number;
   arrival_in_seconds: number;

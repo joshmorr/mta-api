@@ -63,6 +63,26 @@ describe('tools/list', () => {
       expect(tool.description).toMatch(/reuses IDs across systems/);
     }
   });
+
+  it('tells the model to label routes by name on the tools that return one', async () => {
+    const byName = new Map((await mcp.listTools()).map((t) => [t.name, t]));
+    for (const name of ['mta_get_arrivals', 'mta_get_vehicles']) {
+      expect(byName.get(name)?.description).toMatch(/never by `route_id`/);
+    }
+  });
+
+  it('advertises route_name on the arrivals and vehicles output schemas', async () => {
+    const byName = new Map((await mcp.listTools()).map((t) => [t.name, t]));
+
+    const arrivalItem = (byName.get('mta_get_arrivals')?.outputSchema as Record<string, any>)
+      .properties.arrivals.items;
+    expect(Object.keys(arrivalItem.properties)).toContain('route_name');
+    expect(arrivalItem.required).toContain('route_name');
+
+    const vehicles = byName.get('mta_get_vehicles')?.outputSchema as Record<string, any>;
+    expect(Object.keys(vehicles.properties)).toContain('route_name');
+    expect(vehicles.required).toContain('route_name');
+  });
 });
 
 describe('mta_search_stops', () => {

@@ -9,7 +9,7 @@ import {
   NotFoundError,
 } from '../../src/services/realtime.service';
 import type { FeedMessage } from '../../src/types/gtfs';
-import { resetDb, seedSubway } from '../helpers/seed';
+import { resetDb, seedSubway, seedLirr } from '../helpers/seed';
 import { db } from '../../src/db/client';
 
 // All dates chosen to have unambiguous NY equivalents:
@@ -328,6 +328,96 @@ describe('getArrivalsForStop', () => {
   });
 });
 
+describe('route names on arrivals', () => {
+  beforeEach(() => {
+    resetDb();
+    seedSubway();
+    db.run(`UPDATE calendar SET saturday = 1, sunday = 1 WHERE service_id = 'WKDY'`);
+  });
+
+  /** Give the LIRR fixture (stops + the PW route) a schedule so PW is a served route at stop 1. */
+  function seedLirrSchedule(): void {
+    seedLirr();
+    db.run(
+      `INSERT INTO trips (feed_id, trip_id, route_id, service_id, direction_id, shape_id)
+       VALUES ('lirr', 'L1', 'PW', 'DAILY', 0, NULL)`,
+    );
+    db.run(
+      `INSERT INTO stop_times (feed_id, trip_id, stop_id, arrival_time, departure_time, stop_sequence)
+       VALUES ('lirr', 'L1', '1', '10:00:00', '10:00:00', 1)`,
+    );
+    db.run(
+      `INSERT INTO calendar (feed_id, service_id, monday, tuesday, wednesday, thursday, friday, saturday, sunday, start_date, end_date)
+       VALUES ('lirr', 'DAILY', 1, 1, 1, 1, 1, 1, 1, '20200101', '20991231')`,
+    );
+  }
+
+  it('names a commuter-rail route by its branch, not its numeric id', async () => {
+    // The reported bug: LIRR publishes no route_short_name, so an unlabelled
+    // arrival left clients rendering "Route PW" instead of the branch name.
+    seedLirrSchedule();
+    const now = pinClockToMonday();
+    stubFetchWith(await encodeFeedMessage({
+      header: { gtfsRealtimeVersion: '2.0', timestamp: now },
+      entity: [
+        {
+          id: 'a',
+          tripUpdate: {
+            trip: { tripId: 'L1', routeId: 'PW' },
+            stopTimeUpdate: [{ stopId: '1', arrival: { time: now + 60 } }],
+          },
+        },
+      ],
+    }));
+
+    const result = await getArrivalsForStop('1', 10, 'lirr');
+    expect(result.arrivals).toHaveLength(1);
+    expect(result.arrivals[0].route_name).toBe('Port Washington Branch');
+    expect(result.arrivals[0].route_long_name).toBe('Port Washington Branch');
+  });
+
+  it('keeps the subway bullet as the name rather than the long name', async () => {
+    const now = pinClockToMonday();
+    stubFetchWith(await encodeFeedMessage({
+      header: { gtfsRealtimeVersion: '2.0', timestamp: now },
+      entity: [
+        {
+          id: 'a',
+          tripUpdate: {
+            trip: { tripId: 'T1', routeId: '1' },
+            stopTimeUpdate: [{ stopId: '127N', arrival: { time: now + 60 } }],
+          },
+        },
+      ],
+    }));
+
+    const result = await getArrivalsForStop('127', 10, 'subway');
+    expect(result.arrivals[0].route_name).toBe('1');
+    expect(result.arrivals[0].route_long_name).toBe('Broadway - 7 Avenue Local');
+  });
+
+  it('falls back to the route id when the realtime feed names an unknown route', async () => {
+    const now = pinClockToMonday();
+    stubFetchWith(await encodeFeedMessage({
+      header: { gtfsRealtimeVersion: '2.0', timestamp: now },
+      entity: [
+        {
+          id: 'a',
+          tripUpdate: {
+            trip: { tripId: 'TG', routeId: 'GHOST' }, // absent from the static schedule
+            stopTimeUpdate: [{ stopId: '127N', arrival: { time: now + 60 } }],
+          },
+        },
+      ],
+    }));
+
+    const result = await getArrivalsForStop('127', 10, 'subway');
+    expect(result.arrivals).toHaveLength(1);
+    expect(result.arrivals[0].route_name).toBe('GHOST');
+    expect(result.arrivals[0].route_long_name).toBe('GHOST');
+  });
+});
+
 describe('getVehiclesForRoute', () => {
   beforeEach(() => {
     resetDb();
@@ -377,6 +467,18 @@ describe('getVehiclesForRoute', () => {
   it('throws NotFoundError when route does not exist', async () => {
     pinClockToMonday();
     await expect(getVehiclesForRoute('NOPE', 'subway')).rejects.toBeInstanceOf(NotFoundError);
+  });
+
+  it('labels the envelope with the route name', async () => {
+    const now = pinClockToMonday();
+    stubFetchWith(await encodeFeedMessage({
+      header: { gtfsRealtimeVersion: '2.0', timestamp: now },
+      entity: [],
+    }));
+
+    const result = await getVehiclesForRoute('1', 'subway');
+    expect(result.route_name).toBe('1');
+    expect(result.route_long_name).toBe('Broadway - 7 Avenue Local');
   });
 
   it('defaults current_stop_id to "" and status to IN_TRANSIT_TO when missing', async () => {

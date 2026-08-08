@@ -263,7 +263,19 @@
             "example": "subway"
           },
           "route_id": {
-            "type": "string"
+            "type": "string",
+            "description": "Internal GTFS route identifier. Not a display label — on LIRR and Metro-North it is an opaque number (\"4\" is the Ronkonkoma Branch). Use `route_name` when showing this to a user.",
+            "example": "4"
+          },
+          "route_name": {
+            "type": "string",
+            "description": "Rider-facing name for the route: the subway bullet (\"A\", \"7\") or the commuter-rail branch (\"Ronkonkoma Branch\"). Never empty — falls back to `route_id` if the schedule names no route.",
+            "example": "Ronkonkoma Branch"
+          },
+          "route_long_name": {
+            "type": "string",
+            "description": "Longer route name where one exists, otherwise the same value as `route_name`.",
+            "example": "Ronkonkoma Branch"
           },
           "trip_id": {
             "type": "string"
@@ -287,6 +299,8 @@
         "required": [
           "feed_id",
           "route_id",
+          "route_name",
+          "route_long_name",
           "trip_id",
           "arrival_time",
           "arrival_in_seconds",
@@ -307,7 +321,19 @@
             "example": "subway"
           },
           "route_id": {
-            "type": "string"
+            "type": "string",
+            "description": "Internal GTFS route identifier. Not a display label — on LIRR and Metro-North it is an opaque number (\"4\" is the Ronkonkoma Branch). Use `route_name` when showing this to a user.",
+            "example": "4"
+          },
+          "route_name": {
+            "type": "string",
+            "description": "Rider-facing name for the route: the subway bullet (\"A\", \"7\") or the commuter-rail branch (\"Ronkonkoma Branch\"). Never empty — falls back to `route_id` if the schedule names no route.",
+            "example": "Ronkonkoma Branch"
+          },
+          "route_long_name": {
+            "type": "string",
+            "description": "Longer route name where one exists, otherwise the same value as `route_name`.",
+            "example": "Ronkonkoma Branch"
           },
           "generated_at": {
             "type": "number"
@@ -322,6 +348,8 @@
         "required": [
           "feed_id",
           "route_id",
+          "route_name",
+          "route_long_name",
           "generated_at",
           "vehicles"
         ]
