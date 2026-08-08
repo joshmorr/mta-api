@@ -7,7 +7,9 @@ import { syncSubwayFeed, syncLirrFeed, syncMnrFeed } from '../src/services/stati
 
 async function main() {
   console.error('[seed] Running migrations...');
-  runMigrations();
+  // Safe here (unlike server boot): every feed is reimported right below, so
+  // dropping out-of-date tables never leaves the DB emptier than it started.
+  runMigrations({ allowDestructiveRebuild: true });
   resetStaticData();
 
   console.error('[seed] Downloading and importing all feeds (this may take a minute)...');

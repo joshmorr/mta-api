@@ -35,6 +35,13 @@ function hasColumn(tableName: string, columnName: string): boolean {
   return rows.some((row) => row.name === columnName);
 }
 
+function tableExists(tableName: string): boolean {
+  const row = db
+    .query<{ name: string }, [string]>(`SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?`)
+    .get(tableName);
+  return row != null;
+}
+
 function recreateStaticTables() {
   db.run('DROP TABLE IF EXISTS stop_times');
   db.run('DROP TABLE IF EXISTS trips');
@@ -78,14 +85,43 @@ export function analyzeDb() {
   db.run('ANALYZE');
 }
 
-export function runMigrations() {
+/**
+ * `allowDestructiveRebuild` gates dropping+recreating the static tables when their
+ * shape is out of date (see `needsRebuild` below). It defaults to false because
+ * dropping data is only safe when something is about to repopulate it — true for
+ * `scripts/seed.ts` (which deletes and reimports every feed right after this
+ * runs) but not for server boot (`startup.ts`, `mcp/stdio.ts`), which only ever
+ * reads a DB that fetch-db.ts already placed on disk. On Fly, a code deploy that
+ * adds a required column can land *before* the next daily DB rebuild publishes a
+ * matching DB (schema and data are built/published independently, on different
+ * schedules) — if boot dropped tables in that window it would erase the prebuilt
+ * DB with nothing able to refill it, turning a same-day schema bump into a full
+ * outage. Boot instead logs a warning and leaves the existing (possibly
+ * old-shape) data in place; queries touching the missing column fail until a
+ * matching DB is downloaded, but every other endpoint keeps serving.
+ */
+export function runMigrations(opts: { allowDestructiveRebuild?: boolean } = {}) {
+  // A brand-new DB (no `stops` table yet) just needs the schema created below —
+  // there's no existing data to lose, so this is never a "rebuild".
   const needsRebuild =
-    (hasColumn('stops', 'stop_id') && !hasColumn('stops', 'feed_id'))
-    || !hasColumn('stop_times', 'departure_seconds')
-    || !hasColumn('trips', 'trip_headsign');
+    tableExists('stops')
+    && (
+      (hasColumn('stops', 'stop_id') && !hasColumn('stops', 'feed_id'))
+      || !hasColumn('stop_times', 'departure_seconds')
+      || !hasColumn('trips', 'trip_headsign')
+    );
 
   if (needsRebuild) {
-    recreateStaticTables();
+    if (opts.allowDestructiveRebuild) {
+      recreateStaticTables();
+    } else {
+      console.error(
+        '[migrations] WARNING: existing schema is missing columns the current code ' +
+        'expects (stops.feed_id / stop_times.departure_seconds / trips.trip_headsign). ' +
+        'Refusing to drop existing data outside `bun run seed` — queries touching the ' +
+        'missing column(s) will fail until a DB built from the current schema is loaded.',
+      );
+    }
   }
 
   db.run(CREATE_STOPS);
