@@ -129,6 +129,42 @@ export function getParentId(feedId: FeedId, stopId: string): string | null {
   return row?.parent_station ?? null;
 }
 
+export type TransferRow = {
+  to_stop_id: string;
+  to_stop_name: string;
+  transfer_type: number | null;
+  min_transfer_time: number | null;
+  from_route_id: string | null;
+  to_route_id: string | null;
+  from_trip_id: string | null;
+  to_trip_id: string | null;
+};
+
+/**
+ * Transfers originating at a stop, joined to the destination stop's name.
+ * `from_stop_id` must already be the ID as it appears in transfers.txt — for
+ * subway that is the parent station, never a platform — so callers resolve
+ * to a parent/platform ID the same way they do for `getPlatforms`.
+ */
+export function getTransfersByStopId(feedId: FeedId, fromStopId: string): TransferRow[] {
+  return db
+    .query<TransferRow, [FeedId, string]>(
+      `SELECT t.to_stop_id AS to_stop_id,
+              COALESCE(s.stop_name, t.to_stop_id) AS to_stop_name,
+              t.transfer_type AS transfer_type,
+              t.min_transfer_time AS min_transfer_time,
+              t.from_route_id AS from_route_id,
+              t.to_route_id AS to_route_id,
+              t.from_trip_id AS from_trip_id,
+              t.to_trip_id AS to_trip_id
+       FROM transfers t
+       LEFT JOIN stops s ON s.feed_id = t.feed_id AND s.stop_id = t.to_stop_id
+       WHERE t.feed_id = ? AND t.from_stop_id = ?
+       ORDER BY t.to_stop_id`,
+    )
+    .all(feedId, fromStopId);
+}
+
 export type ResolvedStopName = { stop_id: string; stop_name: string };
 
 /**

@@ -6,6 +6,7 @@ import {
   getStopById,
   getPlatforms,
   getParentId,
+  getTransfersByStopId,
 } from '../db/queries/stops';
 import type { StopRow } from '../db/queries/stops';
 import type { FeedId } from '../types/gtfs';
@@ -71,6 +72,7 @@ export function getStopDetail(stopId: string, feedId: FeedId): StopDetail | null
     : stop;
 
   const platforms = parent.feed_id === 'subway' ? getPlatforms(parent.feed_id, parent.stop_id) : [];
+  const transfers = getTransfersByStopId(parent.feed_id, parent.stop_id);
 
   return {
     feed_id:   parent.feed_id,
@@ -81,6 +83,16 @@ export function getStopDetail(stopId: string, feedId: FeedId): StopDetail | null
     platforms: platforms.map((platform) => ({
       stop_id:   platform.stop_id,
       direction: inferDirection(platform.stop_id),
+    })),
+    transfers: transfers.map((t) => ({
+      to_stop_id:        t.to_stop_id,
+      to_stop_name:      t.to_stop_name,
+      transfer_type:     t.transfer_type,
+      min_transfer_time: t.min_transfer_time,
+      from_route_id:     t.from_route_id,
+      to_route_id:       t.to_route_id,
+      from_trip_id:      t.from_trip_id,
+      to_trip_id:        t.to_trip_id,
     })),
   };
 }

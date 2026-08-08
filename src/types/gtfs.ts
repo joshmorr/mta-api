@@ -53,6 +53,19 @@ export interface GtfsStopTime {
   drop_off_type?: string;
 }
 
+export interface GtfsTransfer {
+  from_stop_id: string;
+  to_stop_id: string;
+  transfer_type?: string;
+  min_transfer_time?: string;
+  // MNR only.
+  from_route_id?: string;
+  to_route_id?: string;
+  // LIRR and MNR only; subway ships no trip-level transfers.
+  from_trip_id?: string;
+  to_trip_id?: string;
+}
+
 export interface GtfsCalendar {
   service_id: string;
   monday: string;

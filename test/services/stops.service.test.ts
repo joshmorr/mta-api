@@ -1,6 +1,7 @@
 import { describe, expect, it, beforeEach } from 'bun:test';
 import { searchStops, getStopDetail } from '../../src/services/stops.service';
 import { resetDb, seedSubway, seedLirr, seedMnr } from '../helpers/seed';
+import { db } from '../../src/db/client';
 
 // Times Sq-42 St, the subway fixture's parent station.
 const TIMES_SQ = { lat: 40.755477, lon: -73.987691 };
@@ -118,5 +119,33 @@ describe('getStopDetail', () => {
     const detail = getStopDetail('1', 'lirr');
     expect(detail?.stop_name).toBe('Penn Station');
     expect(detail?.platforms).toEqual([]);
+  });
+
+  it('returns [] for transfers when the stop has none', () => {
+    expect(getStopDetail('127', 'subway')?.transfers).toEqual([]);
+  });
+
+  it('resolves transfers on the parent station, not the queried platform', () => {
+    db.run(
+      `INSERT INTO stops (feed_id, stop_id, stop_name, stop_lat, stop_lon, location_type, parent_station)
+       VALUES ('subway', '902', 'Times Sq-42 St (Shuttle)', 40.7556, -73.9866, 1, NULL)`,
+    );
+    db.run(
+      `INSERT INTO transfers (feed_id, from_stop_id, to_stop_id, transfer_type, min_transfer_time)
+       VALUES ('subway', '127', '902', 2, 180)`,
+    );
+    const detail = getStopDetail('127N', 'subway'); // query by platform
+    expect(detail?.transfers).toEqual([
+      {
+        to_stop_id:        '902',
+        to_stop_name:      'Times Sq-42 St (Shuttle)',
+        transfer_type:     2,
+        min_transfer_time: 180,
+        from_route_id:     null,
+        to_route_id:       null,
+        from_trip_id:      null,
+        to_trip_id:        null,
+      },
+    ]);
   });
 });

@@ -6,6 +6,7 @@ import type {
   GtfsRoute,
   GtfsStop,
   GtfsStopTime,
+  GtfsTransfer,
   GtfsTrip,
 } from '../../types/gtfs';
 import { toGtfsSeconds, toIntOrNull } from '../../utils/gtfsParse';
@@ -20,6 +21,7 @@ export function clearFeedData(feedId: FeedId) {
     db.run(`DELETE FROM calendar WHERE feed_id = ?`, [feedId]);
     db.run(`DELETE FROM routes WHERE feed_id = ?`, [feedId]);
     db.run(`DELETE FROM stops WHERE feed_id = ?`, [feedId]);
+    db.run(`DELETE FROM transfers WHERE feed_id = ?`, [feedId]);
   })();
 }
 
@@ -238,6 +240,40 @@ export function upsertCalendarDates(rows: GtfsCalendarDate[], feedId: FeedId) {
         $date:           r.date,
         $exception_type: parseInt(r.exception_type) || 0,
       });
+    }
+  })();
+}
+
+/**
+ * `transfers` has no declared PK (see schema.ts), so this is a plain INSERT,
+ * not INSERT OR REPLACE — there is no conflict target, and per-trip rows that
+ * share every other column (common on MNR) must all survive.
+ */
+export function upsertTransfers(rows: GtfsTransfer[], feedId: FeedId) {
+  const stmt = db.prepare(
+    `INSERT INTO transfers
+       (feed_id, from_stop_id, to_stop_id, transfer_type, min_transfer_time,
+        from_route_id, to_route_id, from_trip_id, to_trip_id)
+     VALUES
+       ($feed_id, $from_stop_id, $to_stop_id, $transfer_type, $min_transfer_time,
+        $from_route_id, $to_route_id, $from_trip_id, $to_trip_id)`
+  );
+  db.transaction(() => {
+    for (let i = 0; i < rows.length; i += BATCH_SIZE) {
+      for (const r of rows.slice(i, i + BATCH_SIZE)) {
+        if (!r.from_stop_id || !r.to_stop_id) continue;
+        stmt.run({
+          $feed_id:           feedId,
+          $from_stop_id:      r.from_stop_id,
+          $to_stop_id:        r.to_stop_id,
+          $transfer_type:     toIntOrNull(r.transfer_type),
+          $min_transfer_time: toIntOrNull(r.min_transfer_time),
+          $from_route_id:     r.from_route_id || null,
+          $to_route_id:       r.to_route_id || null,
+          $from_trip_id:      r.from_trip_id || null,
+          $to_trip_id:        r.to_trip_id || null,
+        });
+      }
     }
   })();
 }

@@ -103,10 +103,14 @@ export function registerMtaTools(server: McpServer): void {
     {
       title: 'Get an MTA stop',
       description:
-        'Full detail for one stop: name, coordinates, and its platforms with the direction each serves. ' +
+        'Full detail for one stop: name, coordinates, its platforms with the direction each serves, and any ' +
+        'GTFS transfers.txt connections to other stops. ' +
         `${FEED_NOTE}\n\n` +
         'Subway stops are hierarchical — passing a platform ID such as "127N" returns its parent station "127" ' +
         'with every platform listed. LIRR and Metro-North stops are flat and have no platforms.\n\n' +
+        'transfers[] lists other stops reachable via a declared transfer; from_route_id/to_route_id are MNR-only ' +
+        'and from_trip_id/to_trip_id are LIRR/MNR-only (per-trip guaranteed transfers) — expect duplicate ' +
+        'to_stop_id entries when a station has several such trip pairs.\n\n' +
         'Use mta_search_stops first if you have a station name rather than an ID.',
       inputSchema: GetStopInput,
       outputSchema: StopDetailSchema,

@@ -92,6 +92,23 @@ CREATE TABLE IF NOT EXISTS feed_meta (
   last_synced INTEGER NOT NULL
 )`;
 
+// Plain rowid table, no declared PK. MNR alone has 13,744 rows over 114
+// stops that differ only by from_trip_id/to_trip_id (per-trip guaranteed
+// transfers); a (feed_id, from_stop_id, to_stop_id) PK would silently
+// collapse most of them under INSERT OR REPLACE.
+export const CREATE_TRANSFERS = `
+CREATE TABLE IF NOT EXISTS transfers (
+  feed_id           TEXT NOT NULL,
+  from_stop_id      TEXT NOT NULL,
+  to_stop_id        TEXT NOT NULL,
+  transfer_type     INTEGER,
+  min_transfer_time INTEGER,
+  from_route_id     TEXT,
+  to_route_id       TEXT,
+  from_trip_id      TEXT,
+  to_trip_id        TEXT
+)`;
+
 export const CREATE_INDEXES = [
   `CREATE INDEX IF NOT EXISTS idx_stop_times_stop_id ON stop_times(feed_id, stop_id)`,
   // Covering index for the arrivals hot path (getServedRouteIdsByStopIds): that
@@ -104,4 +121,5 @@ export const CREATE_INDEXES = [
   `CREATE INDEX IF NOT EXISTS idx_stops_name         ON stops(stop_name COLLATE NOCASE)`,
   `CREATE INDEX IF NOT EXISTS idx_routes_type        ON routes(feed_id, route_type)`,
   `CREATE INDEX IF NOT EXISTS idx_calendar_dates     ON calendar_dates(feed_id, date)`,
+  `CREATE INDEX IF NOT EXISTS idx_transfers_from     ON transfers(feed_id, from_stop_id)`,
 ];

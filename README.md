@@ -171,9 +171,14 @@ GET /stops/1?feed=lirr
   "platforms": [
     { "stop_id": "127N", "direction": "Uptown / Northbound" },
     { "stop_id": "127S", "direction": "Downtown / Southbound" }
+  ],
+  "transfers": [
+    { "to_stop_id": "902", "to_stop_name": "Times Sq-42 St", "transfer_type": 2, "min_transfer_time": 180, "from_route_id": null, "to_route_id": null, "from_trip_id": null, "to_trip_id": null }
   ]
 }
 ```
+
+> `transfers` comes straight from GTFS `transfers.txt`. `from_route_id`/`to_route_id` are populated on MNR only; `from_trip_id`/`to_trip_id` on LIRR and MNR only (per-trip guaranteed transfers, so the same `to_stop_id` can repeat once per trip pair).
 
 ---
 
@@ -435,7 +440,7 @@ All seven are read-only and non-destructive.
 | Tool | Returns | Live feed |
 |------|---------|:---:|
 | `mta_search_stops` | Stops by name, by proximity, or unfiltered | |
-| `mta_get_stop` | One stop with its platforms and their directions | |
+| `mta_get_stop` | One stop with its platforms, their directions, and its GTFS transfers | |
 | `mta_list_routes` | All routes, optionally for one system | |
 | `mta_get_route` | One route's names and colour | |
 | `mta_get_arrivals` | Upcoming arrivals at a stop, soonest first | ✅ |

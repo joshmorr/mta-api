@@ -8,6 +8,7 @@ import {
   CREATE_CALENDAR,
   CREATE_CALENDAR_DATES,
   CREATE_FEED_META,
+  CREATE_TRANSFERS,
   CREATE_INDEXES,
 } from './schema';
 import { mkdirSync } from 'fs';
@@ -41,6 +42,7 @@ function recreateStaticTables() {
   db.run('DROP TABLE IF EXISTS calendar');
   db.run('DROP TABLE IF EXISTS routes');
   db.run('DROP TABLE IF EXISTS stops');
+  db.run('DROP TABLE IF EXISTS transfers');
 }
 
 export function resetStaticData() {
@@ -50,6 +52,7 @@ export function resetStaticData() {
   db.run('DELETE FROM calendar');
   db.run('DELETE FROM routes');
   db.run('DELETE FROM stops');
+  db.run('DELETE FROM transfers');
   db.run('DELETE FROM feed_meta');
 }
 
@@ -92,6 +95,7 @@ export function runMigrations() {
   db.run(CREATE_CALENDAR);
   db.run(CREATE_CALENDAR_DATES);
   db.run(CREATE_FEED_META);
+  db.run(CREATE_TRANSFERS);
   for (const idx of CREATE_INDEXES) {
     db.run(idx);
   }

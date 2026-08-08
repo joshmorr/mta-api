@@ -21,6 +21,7 @@ HTTP 200
 jsonpath "$.stop_id" exists
 jsonpath "$.feed_id" == "subway"
 jsonpath "$.platforms" isCollection
+jsonpath "$.transfers" isCollection
 
 # --- known stable ID: subway stop 127 is Times Sq-42 St ----------------------
 GET {{base}}/stops/127?feed=subway

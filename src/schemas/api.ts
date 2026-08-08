@@ -38,6 +38,19 @@ export const PlatformDetailSchema = z.object({
   direction: z.string(),
 }).openapi('PlatformDetail');
 
+export const TransferDetailSchema = z.object({
+  to_stop_id: z.string(),
+  to_stop_name: z.string(),
+  transfer_type: z.number().int().nullable().openapi({
+    description: '0 recommended, 1 timed (vehicle guaranteed to wait), 2 requires min_transfer_time, 3 not possible.',
+  }),
+  min_transfer_time: z.number().int().nullable(),
+  from_route_id: z.string().nullable().openapi({ description: 'MNR only; null on subway/LIRR.' }),
+  to_route_id: z.string().nullable(),
+  from_trip_id: z.string().nullable().openapi({ description: 'LIRR/MNR only; null on subway.' }),
+  to_trip_id: z.string().nullable(),
+}).openapi('TransferDetail');
+
 export const StopSummarySchema = z.object({
   feed_id: FeedTypeSchema,
   stop_id: z.string(),
@@ -54,6 +67,7 @@ export const StopDetailSchema = z.object({
   lat: z.number(),
   lon: z.number(),
   platforms: z.array(PlatformDetailSchema),
+  transfers: z.array(TransferDetailSchema),
 }).openapi('StopDetail');
 
 export const StopListResponseSchema = z.object({

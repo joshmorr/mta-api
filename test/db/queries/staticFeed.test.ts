@@ -7,6 +7,7 @@ import {
   upsertStopTimesBatch,
   upsertCalendar,
   upsertCalendarDates,
+  upsertTransfers,
   clearFeedData,
   setFeedMeta,
   getFeedMeta,
@@ -552,6 +553,98 @@ describe('db/queries/staticFeed', () => {
     });
   });
 
+  describe('upsertTransfers', () => {
+    it('parses a subway-shaped row (no route/trip columns)', () => {
+      upsertTransfers(
+        [{ from_stop_id: '127', to_stop_id: '902', transfer_type: '2', min_transfer_time: '180' }],
+        'subway',
+      );
+      const row = db
+        .query<
+          { from_stop_id: string; to_stop_id: string; transfer_type: number; min_transfer_time: number; from_trip_id: string | null },
+          []
+        >(`SELECT from_stop_id, to_stop_id, transfer_type, min_transfer_time, from_trip_id FROM transfers`)
+        .get();
+      expect(row).toEqual({
+        from_stop_id:      '127',
+        to_stop_id:        '902',
+        transfer_type:     2,
+        min_transfer_time: 180,
+        from_trip_id:      null,
+      });
+    });
+
+    it('parses an LIRR-shaped row (adds from_trip_id/to_trip_id)', () => {
+      upsertTransfers(
+        [
+          {
+            from_stop_id: '102',
+            to_stop_id: '102',
+            from_trip_id: 'GO201_26_2306',
+            to_trip_id: 'GO201_26_2',
+            transfer_type: '1',
+            min_transfer_time: '',
+          },
+        ],
+        'lirr',
+      );
+      const row = db
+        .query<{ from_trip_id: string | null; to_trip_id: string | null; min_transfer_time: number | null }, []>(
+          `SELECT from_trip_id, to_trip_id, min_transfer_time FROM transfers`,
+        )
+        .get();
+      expect(row).toEqual({ from_trip_id: 'GO201_26_2306', to_trip_id: 'GO201_26_2', min_transfer_time: null });
+    });
+
+    it('parses an MNR-shaped row and keeps both rows on a shared stop pair that differ only by trip', () => {
+      upsertTransfers(
+        [
+          {
+            from_stop_id: '20',
+            to_stop_id: '20',
+            from_route_id: '',
+            to_route_id: '',
+            from_trip_id: 'TRIP_A1',
+            to_trip_id: 'TRIP_B1',
+            transfer_type: '1',
+            min_transfer_time: '',
+          },
+          {
+            from_stop_id: '20',
+            to_stop_id: '20',
+            from_route_id: '',
+            to_route_id: '',
+            from_trip_id: 'TRIP_A2',
+            to_trip_id: 'TRIP_B2',
+            transfer_type: '1',
+            min_transfer_time: '',
+          },
+        ],
+        'mnr',
+      );
+      const rows = db
+        .query<{ from_trip_id: string; to_trip_id: string }, []>(
+          `SELECT from_trip_id, to_trip_id FROM transfers ORDER BY from_trip_id`,
+        )
+        .all();
+      expect(rows).toEqual([
+        { from_trip_id: 'TRIP_A1', to_trip_id: 'TRIP_B1' },
+        { from_trip_id: 'TRIP_A2', to_trip_id: 'TRIP_B2' },
+      ]);
+    });
+
+    it('skips rows missing from_stop_id or to_stop_id', () => {
+      upsertTransfers(
+        [
+          { from_stop_id: '', to_stop_id: '902', transfer_type: '2' },
+          { from_stop_id: '127', to_stop_id: '', transfer_type: '2' },
+        ],
+        'subway',
+      );
+      expect(db.query<{ cnt: number }, []>(`SELECT COUNT(*) cnt FROM transfers`).get()?.cnt).toBe(0);
+    });
+  });
+
   describe('clearFeedData', () => {
     it('deletes only the requested feed', () => {
       upsertStops(
@@ -564,6 +657,14 @@ describe('db/queries/staticFeed', () => {
       );
       clearFeedData('subway');
       const rows = db.query<{ feed_id: string }, []>(`SELECT feed_id FROM stops`).all();
+      expect(rows.map((r) => r.feed_id)).toEqual(['lirr']);
+    });
+
+    it('also deletes only the requested feed from transfers', () => {
+      upsertTransfers([{ from_stop_id: 'A', to_stop_id: 'B', transfer_type: '2' }], 'subway');
+      upsertTransfers([{ from_stop_id: 'A', to_stop_id: 'B', transfer_type: '2' }], 'lirr');
+      clearFeedData('subway');
+      const rows = db.query<{ feed_id: string }, []>(`SELECT feed_id FROM transfers`).all();
       expect(rows.map((r) => r.feed_id)).toEqual(['lirr']);
     });
   });

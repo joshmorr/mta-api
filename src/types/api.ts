@@ -14,6 +14,20 @@ export interface PlatformDetail {
   direction: string;
 }
 
+export interface TransferDetail {
+  to_stop_id: string;
+  to_stop_name: string;
+  /** GTFS transfer_type: 0 recommended, 1 timed, 2 requires min_transfer_time, 3 not possible. */
+  transfer_type: number | null;
+  min_transfer_time: number | null;
+  /** MNR only; null on subway/LIRR. */
+  from_route_id: string | null;
+  to_route_id: string | null;
+  /** LIRR/MNR only; null on subway, which ships no trip-level transfers. */
+  from_trip_id: string | null;
+  to_trip_id: string | null;
+}
+
 export interface StopDetail {
   feed_id: FeedId;
   stop_id: string;
@@ -21,6 +35,7 @@ export interface StopDetail {
   lat: number;
   lon: number;
   platforms: PlatformDetail[];
+  transfers: TransferDetail[];
 }
 
 export interface Arrival {

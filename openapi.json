@@ -127,6 +127,12 @@
             "items": {
               "$ref": "#/components/schemas/PlatformDetail"
             }
+          },
+          "transfers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TransferDetail"
+            }
           }
         },
         "required": [
@@ -135,7 +141,8 @@
           "stop_name",
           "lat",
           "lon",
-          "platforms"
+          "platforms",
+          "transfers"
         ]
       },
       "PlatformDetail": {
@@ -151,6 +158,54 @@
         "required": [
           "stop_id",
           "direction"
+        ]
+      },
+      "TransferDetail": {
+        "type": "object",
+        "properties": {
+          "to_stop_id": {
+            "type": "string"
+          },
+          "to_stop_name": {
+            "type": "string"
+          },
+          "transfer_type": {
+            "type": "integer",
+            "nullable": true,
+            "description": "0 recommended, 1 timed (vehicle guaranteed to wait), 2 requires min_transfer_time, 3 not possible."
+          },
+          "min_transfer_time": {
+            "type": "integer",
+            "nullable": true
+          },
+          "from_route_id": {
+            "type": "string",
+            "nullable": true,
+            "description": "MNR only; null on subway/LIRR."
+          },
+          "to_route_id": {
+            "type": "string",
+            "nullable": true
+          },
+          "from_trip_id": {
+            "type": "string",
+            "nullable": true,
+            "description": "LIRR/MNR only; null on subway."
+          },
+          "to_trip_id": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "required": [
+          "to_stop_id",
+          "to_stop_name",
+          "transfer_type",
+          "min_transfer_time",
+          "from_route_id",
+          "to_route_id",
+          "from_trip_id",
+          "to_trip_id"
         ]
       },
       "RouteListResponse": {
