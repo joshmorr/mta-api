@@ -117,6 +117,12 @@ export const CREATE_INDEXES = [
   // index alone, with no row lookup into the 2.9M-row stop_times table.
   `CREATE INDEX IF NOT EXISTS idx_stop_times_stop_trip ON stop_times(feed_id, stop_id, trip_id)`,
   `CREATE INDEX IF NOT EXISTS idx_stop_times_trip_id ON stop_times(feed_id, trip_id)`,
+  // Schedule surface hot path: a board query filters on (feed_id, stop_id)
+  // and orders/paginates on departure_seconds. Deliberately does NOT cover
+  // trip_id — subway trip IDs run ~40 chars, and a covering index would add
+  // 120MB+ to a 782MB artifact; the integer seconds column alone keeps this
+  // index to ~40MB vs ~70MB for a TEXT-time equivalent over 2.9M rows.
+  `CREATE INDEX IF NOT EXISTS idx_stop_times_stop_dep ON stop_times(feed_id, stop_id, departure_seconds)`,
   `CREATE INDEX IF NOT EXISTS idx_trips_route_id     ON trips(feed_id, route_id)`,
   `CREATE INDEX IF NOT EXISTS idx_stops_name         ON stops(stop_name COLLATE NOCASE)`,
   `CREATE INDEX IF NOT EXISTS idx_routes_type        ON routes(feed_id, route_type)`,
