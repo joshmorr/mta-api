@@ -67,7 +67,7 @@ Put new logic in a service, not in a handler — a handler-only implementation i
 
 ### MCP server
 
-`src/mcp/tools.ts` registers seven read-only tools (the API's entity endpoints minus `/health`) via `registerMtaTools()`. `src/mcp/server.ts` exports the `buildMcpServer()` factory, used by both transports:
+`src/mcp/tools.ts` registers nine read-only tools (the API's entity endpoints minus `/health`) via `registerMtaTools()`. `src/mcp/server.ts` exports the `buildMcpServer()` factory, used by both transports:
 
 - **stdio** — `src/mcp/stdio.ts`, wired as the `mta-mcp` bin and `bun run mcp`. A client launches it as a subprocess.
 - **HTTP** — `POST /mcp` in `src/index.ts`, via the SDK's web-standard fetch face (`createMcpHandler(...).fetch` takes a `Request` and returns a `Response`, so it drops straight into Hono).
