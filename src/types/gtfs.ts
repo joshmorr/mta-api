@@ -9,6 +9,10 @@ export interface GtfsStop {
   stop_lon: string;
   location_type: string;
   parent_station?: string;
+  stop_code?: string;
+  stop_desc?: string;
+  zone_id?: string;
+  wheelchair_boarding?: string;
 }
 
 export interface GtfsRoute {
@@ -18,6 +22,10 @@ export interface GtfsRoute {
   route_long_name: string;
   route_color: string;
   route_type: string;
+  route_desc?: string;
+  route_url?: string;
+  route_text_color?: string;
+  route_sort_order?: string;
 }
 
 export interface GtfsTrip {
@@ -26,6 +34,11 @@ export interface GtfsTrip {
   service_id: string;
   direction_id: string;
   shape_id: string;
+  trip_headsign?: string;
+  trip_short_name?: string;
+  block_id?: string;
+  wheelchair_accessible?: string;
+  peak_offpeak?: string;
 }
 
 export interface GtfsStopTime {
@@ -34,6 +47,10 @@ export interface GtfsStopTime {
   arrival_time: string;
   departure_time: string;
   stop_sequence: string;
+  track?: string;
+  note_id?: string;
+  pickup_type?: string;
+  drop_off_type?: string;
 }
 
 export interface GtfsCalendar {

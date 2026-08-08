@@ -90,6 +90,63 @@ describe('db/queries/staticFeed', () => {
       expect(rows).toHaveLength(1);
       expect(rows[0].stop_name).toBe('second');
     });
+
+    it('captures stop_code/stop_desc/zone_id/wheelchair_boarding when the feed ships them', () => {
+      upsertStops(
+        [
+          {
+            stop_id: 'A',
+            stop_name: 'Alpha',
+            stop_lat: '40.5',
+            stop_lon: '-73.5',
+            location_type: '0',
+            parent_station: '',
+            stop_code: 'ABT',
+            stop_desc: 'Albertson',
+            zone_id: '3',
+            wheelchair_boarding: '1',
+          },
+        ],
+        'lirr',
+      );
+      const row = db
+        .query<
+          { stop_code: string | null; stop_desc: string | null; zone_id: string | null; wheelchair_boarding: number | null },
+          []
+        >(`SELECT stop_code, stop_desc, zone_id, wheelchair_boarding FROM stops`)
+        .get();
+      expect(row).toEqual({
+        stop_code: 'ABT',
+        stop_desc: 'Albertson',
+        zone_id: '3',
+        wheelchair_boarding: 1,
+      });
+    });
+
+    it('stores NULL, not 0, for wheelchair_boarding when the column is absent from the feed', () => {
+      // Subway stops.txt ships no wheelchair_boarding column, so the field is
+      // absent from the row object entirely (not '') — mirrors what parseCSV
+      // produces for an unshipped column.
+      upsertStops(
+        [
+          {
+            stop_id: 'A',
+            stop_name: 'Alpha',
+            stop_lat: '0',
+            stop_lon: '0',
+            location_type: '0',
+            parent_station: '',
+          },
+        ],
+        'subway',
+      );
+      const row = db
+        .query<{ wheelchair_boarding: number | null }, []>(
+          `SELECT wheelchair_boarding FROM stops`,
+        )
+        .get();
+      expect(row?.wheelchair_boarding).toBeNull();
+    });
   });
 
   describe('upsertRoutes', () => {
@@ -136,6 +193,47 @@ describe('db/queries/staticFeed', () => {
       );
       expect(db.query<{ cnt: number }, []>(`SELECT COUNT(*) cnt FROM routes`).get()?.cnt).toBe(0);
     });
+
+    it('captures route_desc/route_url/route_sort_order and prefixes route_text_color with #', () => {
+      upsertRoutes(
+        [
+          {
+            route_id: 'A',
+            agency_id: 'NYCT',
+            route_short_name: 'A',
+            route_long_name: '8th Av',
+            route_color: '0039A6',
+            route_type: '1',
+            route_desc: 'Trains operate...',
+            route_url: 'https://mta.info/a',
+            route_text_color: 'FFFFFF',
+            route_sort_order: '5',
+          },
+        ],
+        'subway',
+      );
+      const row = db
+        .query<
+          { route_desc: string | null; route_url: string | null; route_text_color: string | null; route_sort_order: number | null },
+          []
+        >(`SELECT route_desc, route_url, route_text_color, route_sort_order FROM routes`)
+        .get();
+      expect(row).toEqual({
+        route_desc: 'Trains operate...',
+        route_url: 'https://mta.info/a',
+        route_text_color: '#FFFFFF',
+        route_sort_order: 5,
+      });
+    });
+
+    it('leaves route_sort_order NULL when the feed does not ship it', () => {
+      upsertRoutes(
+        [{ route_id: 'A', agency_id: '', route_short_name: 'A', route_long_name: '', route_color: '', route_type: '1' }],
+        'lirr',
+      );
+      const row = db.query<{ route_sort_order: number | null }, []>(`SELECT route_sort_order FROM routes`).get();
+      expect(row?.route_sort_order).toBeNull();
+    });
   });
 
   describe('upsertTrips', () => {
@@ -160,6 +258,77 @@ describe('db/queries/staticFeed', () => {
         .all();
       expect(rows).toHaveLength(1);
       expect(rows[0]).toEqual({ trip_id: 'T1', direction_id: 1, shape_id: null });
+    });
+
+    it('stores direction_id as NULL rather than 0 when blank', () => {
+      upsertRoutes(
+        [{ route_id: 'A', agency_id: '', route_short_name: 'A', route_long_name: '', route_color: '', route_type: '1' }],
+        'subway',
+      );
+      upsertTrips(
+        [{ trip_id: 'T1', route_id: 'A', service_id: 'S', direction_id: '', shape_id: '' }],
+        'subway',
+      );
+      const row = db.query<{ direction_id: number | null }, []>(`SELECT direction_id FROM trips`).get();
+      expect(row?.direction_id).toBeNull();
+    });
+
+    it('captures trip_headsign/trip_short_name/block_id/wheelchair_accessible/peak_offpeak', () => {
+      upsertRoutes(
+        [{ route_id: 'A', agency_id: '', route_short_name: 'A', route_long_name: '', route_color: '', route_type: '1' }],
+        'lirr',
+      );
+      upsertTrips(
+        [
+          {
+            trip_id: 'T1',
+            route_id: 'A',
+            service_id: 'S',
+            direction_id: '1',
+            shape_id: '',
+            trip_headsign: 'Penn Station',
+            trip_short_name: '1234',
+            block_id: 'B1',
+            wheelchair_accessible: '1',
+            peak_offpeak: '1',
+          },
+        ],
+        'lirr',
+      );
+      const row = db
+        .query<
+          {
+            trip_headsign: string | null;
+            trip_short_name: string | null;
+            block_id: string | null;
+            wheelchair_accessible: number | null;
+            peak_offpeak: number | null;
+          },
+          []
+        >(
+          `SELECT trip_headsign, trip_short_name, block_id, wheelchair_accessible, peak_offpeak FROM trips`,
+        )
+        .get();
+      expect(row).toEqual({
+        trip_headsign: 'Penn Station',
+        trip_short_name: '1234',
+        block_id: 'B1',
+        wheelchair_accessible: 1,
+        peak_offpeak: 1,
+      });
+    });
+
+    it('leaves peak_offpeak NULL for feeds that do not ship the extension (e.g. subway)', () => {
+      upsertRoutes(
+        [{ route_id: 'A', agency_id: '', route_short_name: 'A', route_long_name: '', route_color: '', route_type: '1' }],
+        'subway',
+      );
+      upsertTrips(
+        [{ trip_id: 'T1', route_id: 'A', service_id: 'S', direction_id: '0', shape_id: '' }],
+        'subway',
+      );
+      const row = db.query<{ peak_offpeak: number | null }, []>(`SELECT peak_offpeak FROM trips`).get();
+      expect(row?.peak_offpeak).toBeNull();
     });
   });
 
@@ -192,6 +361,74 @@ describe('db/queries/staticFeed', () => {
         .all();
       expect(rows).toHaveLength(1);
       expect(rows[0]).toEqual({ stop_sequence: 1, arrival_time: '10:00:00' });
+    });
+
+    it('skips a row with a blank stop_sequence rather than inserting it as 0', () => {
+      upsertStopTimes(
+        [
+          { trip_id: 'T1', stop_id: 'X', arrival_time: '10:00:00', departure_time: '10:00:00', stop_sequence: '' },
+        ],
+        'subway',
+      );
+      expect(db.query<{ cnt: number }, []>(`SELECT COUNT(*) cnt FROM stop_times`).get()?.cnt).toBe(0);
+    });
+
+    it('keeps a genuine stop_sequence of 0', () => {
+      upsertStopTimes(
+        [
+          { trip_id: 'T1', stop_id: 'X', arrival_time: '10:00:00', departure_time: '10:00:00', stop_sequence: '0' },
+        ],
+        'subway',
+      );
+      const row = db.query<{ stop_sequence: number }, []>(`SELECT stop_sequence FROM stop_times`).get();
+      expect(row?.stop_sequence).toBe(0);
+    });
+
+    it('computes arrival_seconds/departure_seconds alongside the raw text, including post-midnight rollover', () => {
+      upsertStopTimes(
+        [
+          { trip_id: 'T1', stop_id: 'X', arrival_time: '25:30:00', departure_time: '25:31:00', stop_sequence: '1' },
+        ],
+        'subway',
+      );
+      const row = db
+        .query<
+          { arrival_time: string; arrival_seconds: number; departure_time: string; departure_seconds: number },
+          []
+        >(`SELECT arrival_time, arrival_seconds, departure_time, departure_seconds FROM stop_times`)
+        .get();
+      expect(row).toEqual({
+        arrival_time: '25:30:00',
+        arrival_seconds: 25 * 3600 + 30 * 60,
+        departure_time: '25:31:00',
+        departure_seconds: 25 * 3600 + 31 * 60,
+      });
+    });
+
+    it('captures track/note_id/pickup_type/drop_off_type when the feed ships them', () => {
+      upsertStopTimes(
+        [
+          {
+            trip_id: 'T1',
+            stop_id: 'X',
+            arrival_time: '10:00:00',
+            departure_time: '10:00:00',
+            stop_sequence: '1',
+            track: '14',
+            note_id: 'N1',
+            pickup_type: '0',
+            drop_off_type: '1',
+          },
+        ],
+        'subway',
+      );
+      const row = db
+        .query<
+          { track: string | null; note_id: string | null; pickup_type: number | null; drop_off_type: number | null },
+          []
+        >(`SELECT track, note_id, pickup_type, drop_off_type FROM stop_times`)
+        .get();
+      expect(row).toEqual({ track: '14', note_id: 'N1', pickup_type: 0, drop_off_type: 1 });
     });
   });
 
@@ -240,6 +477,40 @@ describe('db/queries/staticFeed', () => {
       });
       inserter.flush();
       expect(db.query<{ cnt: number }, []>(`SELECT COUNT(*) cnt FROM stop_times`).get()?.cnt).toBe(0);
+    });
+
+    it('skips a row with a blank stop_sequence rather than inserting it as 0', () => {
+      const inserter = upsertStopTimesBatch('subway');
+      inserter.push({
+        trip_id: 'T1',
+        stop_id: 'X',
+        arrival_time: '10:00:00',
+        departure_time: '10:00:00',
+        stop_sequence: '',
+      });
+      inserter.flush();
+      expect(db.query<{ cnt: number }, []>(`SELECT COUNT(*) cnt FROM stop_times`).get()?.cnt).toBe(0);
+    });
+
+    it('computes arrival_seconds/departure_seconds for streamed rows too', () => {
+      const inserter = upsertStopTimesBatch('subway');
+      inserter.push({
+        trip_id: 'T1',
+        stop_id: 'X',
+        arrival_time: '10:05:30',
+        departure_time: '10:06:00',
+        stop_sequence: '1',
+      });
+      inserter.flush();
+      const row = db
+        .query<{ arrival_seconds: number; departure_seconds: number }, []>(
+          `SELECT arrival_seconds, departure_seconds FROM stop_times`,
+        )
+        .get();
+      expect(row).toEqual({
+        arrival_seconds: 10 * 3600 + 5 * 60 + 30,
+        departure_seconds: 10 * 3600 + 6 * 60,
+      });
     });
   });
 

@@ -77,7 +77,9 @@ export function analyzeDb() {
 
 export function runMigrations() {
   const needsRebuild =
-    hasColumn('stops', 'stop_id') && !hasColumn('stops', 'feed_id');
+    (hasColumn('stops', 'stop_id') && !hasColumn('stops', 'feed_id'))
+    || !hasColumn('stop_times', 'departure_seconds')
+    || !hasColumn('trips', 'trip_headsign');
 
   if (needsRebuild) {
     recreateStaticTables();

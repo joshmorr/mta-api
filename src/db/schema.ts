@@ -1,12 +1,16 @@
 export const CREATE_STOPS = `
 CREATE TABLE IF NOT EXISTS stops (
-  feed_id         TEXT NOT NULL,
-  stop_id         TEXT NOT NULL,
-  stop_name       TEXT NOT NULL,
-  stop_lat        REAL,
-  stop_lon        REAL,
-  location_type   INTEGER,
-  parent_station  TEXT,
+  feed_id             TEXT NOT NULL,
+  stop_id             TEXT NOT NULL,
+  stop_name           TEXT NOT NULL,
+  stop_lat            REAL,
+  stop_lon            REAL,
+  location_type       INTEGER,
+  parent_station      TEXT,
+  stop_code           TEXT,
+  stop_desc           TEXT,
+  zone_id             TEXT,
+  wheelchair_boarding INTEGER,
   PRIMARY KEY (feed_id, stop_id)
 )`;
 
@@ -19,29 +23,44 @@ CREATE TABLE IF NOT EXISTS routes (
   route_long_name  TEXT,
   route_color      TEXT,
   route_type       INTEGER,
+  route_desc       TEXT,
+  route_url        TEXT,
+  route_text_color TEXT,
+  route_sort_order INTEGER,
   PRIMARY KEY (feed_id, route_id)
 )`;
 
 export const CREATE_TRIPS = `
 CREATE TABLE IF NOT EXISTS trips (
-  feed_id      TEXT NOT NULL,
-  trip_id      TEXT NOT NULL,
-  route_id     TEXT NOT NULL,
-  service_id   TEXT,
-  direction_id INTEGER,
-  shape_id     TEXT,
+  feed_id               TEXT NOT NULL,
+  trip_id               TEXT NOT NULL,
+  route_id              TEXT NOT NULL,
+  service_id            TEXT,
+  direction_id          INTEGER,
+  shape_id              TEXT,
+  trip_headsign         TEXT,
+  trip_short_name       TEXT,
+  block_id              TEXT,
+  wheelchair_accessible INTEGER,
+  peak_offpeak          INTEGER,
   PRIMARY KEY (feed_id, trip_id),
   FOREIGN KEY (feed_id, route_id) REFERENCES routes(feed_id, route_id)
 )`;
 
 export const CREATE_STOP_TIMES = `
 CREATE TABLE IF NOT EXISTS stop_times (
-  feed_id        TEXT NOT NULL,
-  trip_id        TEXT NOT NULL,
-  stop_id        TEXT NOT NULL,
-  arrival_time   TEXT,
-  departure_time TEXT,
-  stop_sequence  INTEGER,
+  feed_id           TEXT NOT NULL,
+  trip_id           TEXT NOT NULL,
+  stop_id           TEXT NOT NULL,
+  arrival_time      TEXT,
+  departure_time    TEXT,
+  stop_sequence     INTEGER,
+  track             TEXT,
+  note_id           TEXT,
+  pickup_type       INTEGER,
+  drop_off_type     INTEGER,
+  arrival_seconds   INTEGER,
+  departure_seconds INTEGER,
   PRIMARY KEY (feed_id, trip_id, stop_id, stop_sequence),
   FOREIGN KEY (feed_id, trip_id) REFERENCES trips(feed_id, trip_id),
   FOREIGN KEY (feed_id, stop_id) REFERENCES stops(feed_id, stop_id)
