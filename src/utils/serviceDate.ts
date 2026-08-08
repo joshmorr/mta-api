@@ -114,17 +114,30 @@ function tzOffsetMillis(utcMillis: number, timeZone: string): number {
  * The GTFS service-day origin for `yyyymmdd`, as a unix timestamp (seconds):
  * local noon on that date, minus exactly 12 real hours.
  *
- * This is not equivalent to "local midnight". Local noon is never ambiguous
- * (DST transitions in the US happen around 2am, never at noon), so resolving
- * it and then subtracting a fixed 43200-second duration gives an origin that
- * is correct on every date, including the two DST transition days where
- * naive midnight-based arithmetic is off by an hour: the spring-forward date
- * is a 23-hour local day (its origin lands an hour after nominal midnight),
- * the fall-back date is 25 hours (its origin lands an hour after nominal
- * midnight too, absorbing the repeated hour). `departure_seconds` values up
- * to and past 24:00:00 add cleanly on top of this origin either way,
- * including the pathological case of a 25:30:00 departure scheduled on a
- * spring-forward date landing in that date's skipped 2am-3am hour.
+ * This is not equivalent to "local midnight", and deliberately so. Local
+ * noon is never ambiguous (US DST transitions happen around 2am, never at
+ * noon), so resolving it and subtracting a fixed 43200-second duration is
+ * well-defined on every date — but on the two transition dates it lands an
+ * hour away from nominal local midnight, not on it:
+ *   - spring-forward (e.g. 2024-03-10, a 23-hour local day): the origin
+ *     lands at 23:00 the *previous* evening, an hour BEFORE nominal
+ *     midnight — verified: `getServiceDayOriginUnix('20240310')` is
+ *     `2024-03-09T23:00 EST`.
+ *   - fall-back (e.g. 2024-11-03, a 25-hour local day): the origin lands an
+ *     hour AFTER nominal midnight — `getServiceDayOriginUnix('20241103')`
+ *     is `2024-11-03T01:00 EDT`.
+ * That shift is the whole point, not a defect: it's what makes
+ * `departure_seconds` values that cross 24:00:00 resolve to the *literal*
+ * following-morning clock reading a rider would expect. A 25:30:00
+ * departure on the spring-forward date resolves to 2024-03-11 01:30 EDT
+ * (25:30 minus 24:00 = "1:30 the next day", exactly as scheduled) — a
+ * true-midnight-anchored origin would instead land it an hour late, at
+ * 02:30, because it naively spends 25.5 real hours on a calendar day that
+ * only had 23. The cost of this trade-off is narrow and specific: a
+ * departure_seconds value in the *skipped-hour-adjacent* window
+ * (00:00:00-01:59:59) scheduled for the spring-forward date itself lands an
+ * hour early, on the previous evening. Every other date, and every other
+ * time on this date, resolves correctly.
  */
 export function getServiceDayOriginUnix(yyyymmdd: string): number {
   const year = Number(yyyymmdd.slice(0, 4));

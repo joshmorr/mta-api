@@ -6,7 +6,7 @@ import {
   getServedRouteIdsByStopIds,
 } from '../../../src/db/queries/realtimeFeed';
 import { db } from '../../../src/db/client';
-import { resetDb, seedSubway } from '../../helpers/seed';
+import { resetDb, seedSubway, seedSubwaySchedule, seedLirrSchedule, seedMnrSchedule } from '../../helpers/seed';
 
 describe('db/queries/realtimeFeed', () => {
   beforeEach(() => {
@@ -191,6 +191,67 @@ describe('db/queries/realtimeFeed', () => {
         'subway',
         ['127N', '127S'],
         [{ date: '20240115', weekdayColumn: 'monday' }],
+      );
+      expect(rows).toEqual(['1']);
+    });
+
+    // LIRR and MNR ship no calendar.txt — every trip's service is active
+    // exclusively via a calendar_dates exception_type=1 row, with no
+    // calendar row backing it at all. A regression here (e.g. a query that
+    // requires a calendar row to exist) fails silently as an empty array,
+    // not a thrown error, so it needs its own coverage rather than relying
+    // on the calendar+calendar_dates interplay cases above.
+    it('resolves calendar_dates-only service with no calendar row (LIRR)', () => {
+      seedLirrSchedule();
+      const rows = getServedRouteIdsByStopIds(
+        'lirr',
+        ['44'],
+        [{ date: '20240115', weekdayColumn: 'monday' }],
+      );
+      expect(rows).toEqual(['RONK']);
+    });
+
+    it('resolves calendar_dates-only service with no calendar row (MNR)', () => {
+      seedMnrSchedule();
+      const rows = getServedRouteIdsByStopIds(
+        'mnr',
+        ['1'],
+        [{ date: '20240115', weekdayColumn: 'monday' }],
+      );
+      expect(rows).toEqual(['NH']);
+    });
+
+    it('returns [] for calendar_dates-only service on a date with no exception row', () => {
+      seedLirrSchedule();
+      const rows = getServedRouteIdsByStopIds(
+        'lirr',
+        ['44'],
+        [{ date: '20240116', weekdayColumn: 'tuesday' }],
+      );
+      expect(rows).toEqual([]);
+    });
+
+    // Re-asserts exception_type=2 beating a matching weekday against a
+    // physically real, three-stop trip (not the T1 fixture) after the
+    // activeServicePredicate extraction.
+    it('honors exception_type=2 removal against a real trip, even on its normally-active weekday', () => {
+      seedSubwaySchedule();
+      // WKDY is Mon-Fri; 2024-01-22 is a Monday, removed via calendar_dates.
+      const rows = getServedRouteIdsByStopIds(
+        'subway',
+        ['101N'],
+        [{ date: '20240122', weekdayColumn: 'monday' }],
+      );
+      expect(rows).toEqual([]);
+    });
+
+    it('honors exception_type=1 addition against a real trip, on its normally-inactive weekday', () => {
+      seedSubwaySchedule();
+      // WKDY is Mon-Fri; 2024-01-20 is a Saturday, added via calendar_dates.
+      const rows = getServedRouteIdsByStopIds(
+        'subway',
+        ['101N'],
+        [{ date: '20240120', weekdayColumn: 'saturday' }],
       );
       expect(rows).toEqual(['1']);
     });
