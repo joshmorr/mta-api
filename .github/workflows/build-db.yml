@@ -59,6 +59,15 @@ jobs:
         # a booting instance never sees a new version before its gz is complete.
         # --acl public-read: instances fetch these over unsigned HTTP (fetch-db.ts),
         # so the objects must be anonymously readable even on a public-enabled bucket.
+        # --cache-control no-store: every publish overwrites the same key (no
+        # versioned filenames), and Tigris's read cache does not reliably treat an
+        # overwrite as an invalidation — mta.db.gz was observed serving the previous
+        # day's bytes for ~19min after a fresh upload while mta.db.version/.sha256
+        # (small enough to skip the cache) were already current. fetch-db.ts's
+        # checksum check catches the mismatch and falls back safely rather than
+        # installing corrupt data, but that still means an instance can boot on
+        # stale data right after a publish. no-store asks Tigris not to cache these
+        # objects at all, so every fetch goes to origin.
         # Tigris S3 credentials (from `fly storage create`) as repo Secrets.
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
@@ -66,9 +75,9 @@ jobs:
           AWS_ENDPOINT_URL_S3: ${{ secrets.AWS_ENDPOINT_URL_S3 }}
           AWS_REGION: auto
         run: |
-          aws s3 cp ./build/mta.db.gz     "s3://${BUCKET}/mta.db.gz"     --acl public-read --endpoint-url "$AWS_ENDPOINT_URL_S3"
-          aws s3 cp ./build/mta.db.sha256 "s3://${BUCKET}/mta.db.sha256" --acl public-read --endpoint-url "$AWS_ENDPOINT_URL_S3"
-          aws s3 cp ./build/mta.db.version "s3://${BUCKET}/mta.db.version" --acl public-read --endpoint-url "$AWS_ENDPOINT_URL_S3"
+          aws s3 cp ./build/mta.db.gz     "s3://${BUCKET}/mta.db.gz"     --acl public-read --cache-control no-store --endpoint-url "$AWS_ENDPOINT_URL_S3"
+          aws s3 cp ./build/mta.db.sha256 "s3://${BUCKET}/mta.db.sha256" --acl public-read --cache-control no-store --endpoint-url "$AWS_ENDPOINT_URL_S3"
+          aws s3 cp ./build/mta.db.version "s3://${BUCKET}/mta.db.version" --acl public-read --cache-control no-store --endpoint-url "$AWS_ENDPOINT_URL_S3"
 
       - name: Set up flyctl
         # Pinned to a full commit SHA, not @master: a mutable ref would run whatever
