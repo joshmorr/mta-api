@@ -17,6 +17,7 @@ The same data is also served as [MCP](#mcp-server) tools over stdio or HTTP, so 
 | 🚆 LIRR | ✅ | ✅ |
 | 🚆 Metro-North | ✅ | ✅ |
 | 🚌 Bus | Coming soon | Coming soon |
+> Alerts are system-wide
 
 ---
 
@@ -30,9 +31,6 @@ bun run dev     # start with hot reload
 
 `bun run dev` / `bun run start` require a seeded database — run `bun run seed` first. If the database is empty, the server exits immediately with an error.
 
-```
-http://localhost:3000
-```
 
 ---
 
@@ -526,41 +524,37 @@ Tools call the service layer in process. They are not a client of the REST API a
 
 ### Connecting
 
-**Locally, over stdio.** The client launches the server as a subprocess; nothing needs to be running first. Requires a seeded database (`bun run seed`).
+Any MCP client needs either a subprocess command (stdio) or a URL (HTTP):
 
-```json
-{
-  "mcpServers": {
-    "mta": {
-      "command": "bun",
-      "args": ["run", "/absolute/path/to/mta-api/src/mcp/stdio.ts"]
-    }
-  }
-}
-```
 
-Put that in `.mcp.json` (Claude Code) or `claude_desktop_config.json` (Claude Desktop). This repo already ships a [`.mcp.json`](./.mcp.json), so the tools are available when working in it. To check the server by hand:
+- **stdio** — client launches the server as a subprocess; nothing needs to be running first. Requires a seeded database (`bun run seed`).
+- **HTTP** — the running server serves streamable HTTP at `POST /mcp`.
 
+### Claude Code
 ```sh
-bun run mcp   # speaks JSON-RPC on stdin/stdout; ^D to exit
+# stdio
+claude mcp add --transport stdio mta -- bun run src/mcp/stdio.ts
+
+# HTTP - local
+claude mcp add --transport http mta http://localhost:3000/mcp
+
+# HTTP - live
+claude mcp add --transport http mta https://mta-api-restless-pond-4321.fly.dev
 ```
 
-**Remotely, over HTTP.** The running server serves streamable HTTP at `POST /mcp`, so a deployed instance is connectable with no local checkout:
-
-```json
-{
-  "mcpServers": {
-    "mta": { "url": "http://localhost:3000/mcp" }
-  }
-}
-```
-
-Either transport can be inspected with the official tool:
-
+### OpenCode
 ```sh
-npx @modelcontextprotocol/inspector          # then point it at http://localhost:3000/mcp
-npx @modelcontextprotocol/inspector bun run src/mcp/stdio.ts
+# stdio
+opencode mcp add mta -- bun run src/mcp/stdio.ts
+
+# HTTP - local
+opencode mcp add mta --url http://localhost:3000/mcp
+
+# HTTP - live
+opencode mcp add mta --url https://mta-api-restless-pond-4321.fly.dev
 ```
+Run `/mcp` or `claude mcp list` to confirm a connection.
+
 
 ### Tools
 
