@@ -157,7 +157,7 @@ Get a single stop. Accepts parent station IDs or platform IDs. `feed` is require
 GET /stops/127?feed=subway
 GET /stops/127N?feed=subway
 GET /stops/1?feed=lirr
-```
+u``
 
 ```json
 {
@@ -541,6 +541,7 @@ claude mcp add --transport http mta http://localhost:3000/mcp
 # HTTP - live
 claude mcp add --transport http mta https://mta-api-restless-pond-4321.fly.dev
 ```
+Run `/mcp` or `claude mcp list` to confirm a connection.
 
 ### OpenCode
 ```sh
@@ -553,7 +554,6 @@ opencode mcp add mta --url http://localhost:3000/mcp
 # HTTP - live
 opencode mcp add mta --url https://mta-api-restless-pond-4321.fly.dev
 ```
-Run `/mcp` or `claude mcp list` to confirm a connection.
 
 
 ### Tools
