@@ -4,10 +4,19 @@ name: CI
 # drift guard. No DB download, no live MTA feeds, no secrets — the test suite runs
 # in-memory (test/setup.ts sets DB_PATH=:memory:) and the spec is generated purely
 # from source. The heavy GTFS DB build lives separately in build-db.yml.
+#
+# On main (and only on main), a green `checks` run is followed by a Fly deploy.
 
 on:
   push:
   pull_request:
+  # Manual re-run escape hatch: redeploy main without an empty commit.
+  workflow_dispatch: {}
+
+# The deploy job authenticates to Fly with its own token and needs nothing from
+# the repo beyond a checkout.
+permissions:
+  contents: read
 
 jobs:
   checks:
@@ -39,3 +48,43 @@ jobs:
         run: |
           bun run openapi:dump
           git diff --exit-code openapi.json
+
+  deploy:
+    # A red typecheck/lint/test/spec-drift run blocks the deploy.
+    needs: checks
+    # Only ship from main. `push` covers merges; `workflow_dispatch` is the manual
+    # re-run, and the ref check keeps a dispatch on a feature branch from
+    # deploying. Pull requests never reach here.
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    # Queue rather than cancel: killing a rollout partway can leave machines on
+    # mixed versions. Same posture as build-db.yml.
+    concurrency:
+      group: deploy
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up flyctl
+        # Pinned to a full commit SHA, not @master: a mutable ref would run whatever
+        # upstream pushes next in a job that holds FLY_API_TOKEN. ed8efb3 == tag 1.6/v1.
+        uses: superfly/flyctl-actions/setup-flyctl@ed8efb33836e8b2096c7fd3ba1c8afe303ebbff1
+
+      - name: Deploy to Fly
+        # --remote-only builds on Fly's builders, so the runner needs no Docker setup
+        # and the layer cache persists with the builder across runs. The Dockerfile
+        # does its own `bun install`, so there is nothing to build here first.
+        #
+        # Machines re-run start.sh on restart, which re-runs scripts/fetch-db.ts —
+        # that's cheap, it compares the published version marker against the copy on
+        # the volume and skips the transfer when they match. A code deploy does not
+        # re-download the DB.
+        #
+        # FLY_API_TOKEN is scoped to this step, not the job — see the note in
+        # build-db.yml about job-level env leaking into dependency lifecycle scripts.
+        run: flyctl deploy --remote-only --app "$FLY_APP"
+        env:
+          FLY_APP: ${{ vars.FLY_APP }}
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
