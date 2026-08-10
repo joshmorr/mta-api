@@ -253,50 +253,54 @@ When the upstream RT fetch fails but a cached feed is available, the response is
 
 ### `GET /schedule`
 
-Scheduled departures from a stop, sourced from the static GTFS timetable rather than realtime feeds — unaffected by feed outages, and not limited to the near future. `stop` and `feed` are required.
+Scheduled trips **between two stations**, sourced from the static GTFS timetable rather than realtime feeds — unaffected by feed outages, and not limited to the near future. `from`, `to` and `feed` are all required: every departure returned is one whose trip reaches `to` later, carrying a `destination` object with the arrival time there and how long the ride takes.
+
+There is no single-station mode. For "what's leaving this station now" use [`/arrivals`](#get-arrivals), which sees live delays, reroutes, and cancellations that a static timetable cannot; omitting `to` here is a `400` saying so.
 
 | Param | Type | Default | Description |
 |-------|------|---------|-------------|
-| `stop` | string | **required** | Platform or parent station ID |
-| `feed` | string | **required** | One of `subway`, `lirr`, `mnr` |
-| `to` | string | none | Destination stop ID. Filters to departures whose trip reaches this stop later, and adds a `destination` object to each one. |
+| `from` | string | **required** | Origin platform or parent station ID |
+| `to` | string | **required** | Destination platform or parent station ID |
+| `feed` | string | **required** | One of `subway`, `lirr`, `mnr` — both stops must belong to it |
 | `after` | number | now | Unix seconds cursor — only departures at or after this instant. |
 | `date` | string | none | Pin the query to a single `YYYYMMDD` service date instead of the default rolling `[yesterday, today, tomorrow]` window. |
 | `limit` | number | `20` | Max departures (max 100). |
 
 ```
-GET /schedule?stop=44&feed=lirr&to=237&limit=5
-GET /schedule?stop=127&feed=subway&date=20260810
+GET /schedule?from=44&to=237&feed=lirr&limit=5
+GET /schedule?from=127&to=128&feed=subway&date=20260810
 ```
+
+Direction is implied by the pair, so there is no direction parameter. On the subway a parent station ID expands to its platforms on both ends, and the trip's own stop order picks the right pair: `from=127&to=128` matches southbound `127S` departures, `from=128&to=127` northbound `128N` ones.
 
 ```json
 {
   "feed_id": "lirr",
-  "stop_id": "44",
-  "stop_name": "Deer Park",
+  "from_stop_id": "44",
+  "from_stop_name": "Deer Park",
   "to_stop_id": "237",
   "to_stop_name": "Penn Station",
-  "service_dates": ["20260807", "20260808", "20260809"],
-  "generated_at": 1786226151,
+  "service_dates": ["20260809", "20260810", "20260811"],
+  "generated_at": 1786379015,
   "source": "scheduled",
   "departures": [
     {
       "feed_id": "lirr",
-      "trip_id": "GO201_26_7977_1",
+      "trip_id": "GO201_26_1951",
       "route_id": "4",
       "route_name": "Ronkonkoma Branch",
       "route_long_name": "Ronkonkoma Branch",
-      "service_id": "1C6B8C2D",
-      "service_date": "20260808",
+      "service_id": "EB24D2DC",
+      "service_date": "20260810",
       "stop_id": "44",
       "stop_sequence": 4,
-      "arrival_time": "18:22:00",
-      "departure_time": "18:22:00",
-      "arrival_timestamp": 1786227720,
-      "departure_timestamp": 1786227720,
-      "departure_in_seconds": 1569,
+      "arrival_time": "12:35:00",
+      "departure_time": "12:35:00",
+      "arrival_timestamp": 1786379700,
+      "departure_timestamp": 1786379700,
+      "departure_in_seconds": 685,
       "headsign": "Penn Station",
-      "train_number": "7977",
+      "train_number": "1951",
       "direction_id": 1,
       "track": null,
       "peak": false,
@@ -305,20 +309,22 @@ GET /schedule?stop=127&feed=subway&date=20260810
       "destination": {
         "stop_id": "237",
         "stop_name": "Penn Station",
-        "stop_sequence": 15,
-        "arrival_time": "19:31:00",
-        "arrival_timestamp": 1786231860,
-        "duration_seconds": 4140
+        "stop_sequence": 12,
+        "arrival_time": "13:39:00",
+        "arrival_timestamp": 1786383540,
+        "duration_seconds": 3840
       }
     }
   ],
-  "next_after": 1786227721
+  "next_after": 1786379701
 }
 ```
 
-This endpoint has no concept of live delays, reroutes, or cancellations — for "what's the next train right now" prefer `/arrivals`. Pagination is a Unix-seconds cursor: fetch the next page with `after=<next_after>` from the previous response; `next_after` is `null` once a page comes back short of `limit`, the signal there's nothing more to page through.
+This endpoint has no concept of live delays, reroutes, or cancellations — it is the planned timetable. Pagination is a Unix-seconds cursor: fetch the next page with `after=<next_after>` from the previous response; `next_after` is `null` once a page comes back short of `limit`, the signal there's nothing more to page through.
 
-`date` pins the query to one service date and returns that day's whole timetable (paginated by `limit`/`after` within it); omitted, the query spans the rolling 3-day window instead, which is what lets a query made late at night still surface an overnight trip whose GTFS time is past `24:00:00`.
+`date` pins the query to one service date and returns that day's whole set of trips for the pair (paginated by `limit`/`after` within it); omitted, the query spans the rolling 3-day window instead, which is what lets a query made late at night still surface an overnight trip whose GTFS time is past `24:00:00`.
+
+An empty `departures` array with a `200` means no trip connects the two stops in that direction on the queried dates — a stop that doesn't exist at all is a `404` instead, naming whether the origin or the destination was the problem.
 
 `direction_id` is the raw static GTFS value (feed-defined, not derived) — see the branch-relative-not-compass caveat under `/arrivals` above. `peak` is the railroad's own fare-period designation (`true`/`false`) for LIRR/MNR, `null` on subway (no such concept) and wherever the source feed doesn't publish it — it is never derived from the departure time.
 
@@ -576,7 +582,7 @@ All nine are read-only and non-destructive.
 | `mta_get_stop` | One stop with its platforms, their directions, and its GTFS transfers | |
 | `mta_list_routes` | All routes, optionally for one system | |
 | `mta_get_route` | One route's names and colour | |
-| `mta_get_schedule` | Scheduled departures from a stop, from the static timetable — optionally filtered to a destination | |
+| `mta_get_schedule` | Scheduled trips between two stations, from the static timetable, with trip duration | |
 | `mta_get_trip` | One trip's full stop-by-stop static schedule, resolved from a trip_id | |
 | `mta_get_arrivals` | Upcoming arrivals at a stop, soonest first | ✅ |
 | `mta_get_vehicles` | Trains currently active on a route | ✅ |
@@ -585,6 +591,8 @@ All nine are read-only and non-destructive.
 The [feed scoping](#feed-scoping) rule applies: `mta_get_stop`, `mta_get_route`, `mta_get_schedule`, `mta_get_trip`, `mta_get_arrivals`, and `mta_get_vehicles` all require `feed`, and each tool's description explains why. `mta_get_alerts` is the exception — alerts for all three systems arrive on one upstream feed, so it filters by route or stop instead.
 
 `mta_get_schedule` and `mta_get_trip` read only the static timetable, like `mta_get_stop`/`mta_get_route` — they have no live-feed fallback behavior because they never touch a live feed. `mta_get_trip` cannot resolve a Metro-North realtime trip_id to a static one at all (the two ID schemes are unrelated for that feed); its description says so explicitly so an agent doesn't retry.
+
+`mta_get_schedule` requires both `from` and `to`, mirroring the endpoint: it answers "how do I get from A to B, when does it run, how long does it take". An agent asking what's leaving a single station should call `mta_get_arrivals` instead, and both tool descriptions point at each other so the choice doesn't depend on guessing.
 
 Realtime tools degrade the way the HTTP endpoints do: when an upstream feed cannot be reached, cached data is returned with `stale: true` and a `feed_error`, rather than the call failing.
 
