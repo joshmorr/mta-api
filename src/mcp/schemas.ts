@@ -67,12 +67,13 @@ export const GetArrivalsInput = z.object({
 const YYYYMMDD_DESCRIPTION = 'YYYYMMDD, e.g. "20260810". Not a wall-clock string — a bare calendar date.';
 
 export const GetScheduleInput = z.object({
-  stop: z.string().min(1)
-    .describe('Stop ID to get the static timetable for. Use a parent station ID to cover every platform.'),
+  from: z.string().min(1)
+    .describe('Origin stop ID. Use a parent station ID to cover every platform.'),
   feed: FeedSchema.describe(FEED_DESCRIPTION),
-  to: z.string().min(1).optional()
-    .describe('Destination stop ID. When given, only departures whose trip reaches this stop later are ' +
-      'returned, each carrying a `destination` object with the arrival time there and duration_seconds.'),
+  to: z.string().min(1)
+    .describe('Destination stop ID. Only trips that reach this stop later are returned, each carrying a ' +
+      '`destination` object with the arrival time there and duration_seconds. Required — for departures ' +
+      'from a single station with no destination in mind, use mta_get_arrivals instead.'),
   after: z.number().int().nonnegative().optional()
     .describe('Unix seconds cursor — only departures at or after this instant are returned. Omit for "starting ' +
       'now" (or the start of `date`, if `date` is given without this).'),
@@ -80,7 +81,7 @@ export const GetScheduleInput = z.object({
     .describe(`Pin the query to a single service date (${YYYYMMDD_DESCRIPTION}) instead of the default ` +
       '[yesterday, today, tomorrow] window — gives the whole day\'s timetable when `after` is also omitted.'),
   limit: z.number().int().positive().max(100).default(20)
-    .describe('Maximum departures to return, soonest first.'),
+    .describe('Maximum trips to return, soonest first.'),
 }).strict();
 
 export const GetTripInput = z.object({

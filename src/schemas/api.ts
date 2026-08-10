@@ -235,15 +235,17 @@ export const ScheduledDepartureSchema = z.object({
   peak: z.boolean().nullable().openapi({ description: 'LIRR/MNR fare period; null on subway, which has no such concept.' }),
   pickup_type: z.number().int().nullable(),
   drop_off_type: z.number().int().nullable(),
-  destination: ScheduledDepartureDestinationSchema.optional().openapi({ description: 'Present only when `to` was given.' }),
+  destination: ScheduledDepartureDestinationSchema.openapi({
+    description: 'Where this trip reaches the requested `to` stop, including duration_seconds.',
+  }),
 }).openapi('ScheduledDeparture');
 
 export const ScheduleResponseSchema = z.object({
   feed_id: FeedTypeSchema,
-  stop_id: z.string(),
-  stop_name: z.string(),
-  to_stop_id: z.string().nullable(),
-  to_stop_name: z.string().nullable(),
+  from_stop_id: z.string(),
+  from_stop_name: z.string(),
+  to_stop_id: z.string(),
+  to_stop_name: z.string(),
   service_dates: z.array(z.string()).openapi({ description: 'The service dates actually queried, in query order.' }),
   generated_at: z.number(),
   source: z.literal('scheduled'),

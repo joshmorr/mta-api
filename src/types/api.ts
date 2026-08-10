@@ -162,16 +162,16 @@ export interface ScheduledDeparture {
   peak: boolean | null;
   pickup_type: number | null;
   drop_off_type: number | null;
-  /** Present only when `to` was given. */
-  destination?: ScheduledDepartureDestination;
+  /** Where this trip reaches the requested `to` stop. */
+  destination: ScheduledDepartureDestination;
 }
 
 export interface ScheduleResponse {
   feed_id: FeedId;
-  stop_id: string;
-  stop_name: string;
-  to_stop_id: string | null;
-  to_stop_name: string | null;
+  from_stop_id: string;
+  from_stop_name: string;
+  to_stop_id: string;
+  to_stop_name: string;
   /** The service dates actually queried, in query order. */
   service_dates: string[];
   generated_at: number;

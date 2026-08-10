@@ -13,16 +13,19 @@ const getScheduleRoute = createRoute({
   path: '/',
   tags: ['Schedule'],
   operationId: 'getSchedule',
-  summary: 'Get the static timetable for a stop',
+  summary: 'Get scheduled trips between two stations',
   description:
-    'Returns scheduled departures from a stop, sourced from the static GTFS timetable (not realtime). ' +
-    'Unlike /arrivals, results are unaffected by feed outages and extend arbitrarily far into the future. ' +
-    'Provide `to` to filter to departures that reach a specific destination stop, with duration_seconds included.',
+    'Returns scheduled trips from `from` to `to`, sourced from the static GTFS timetable (not realtime). ' +
+    'Every departure reaches `to` later in its trip and carries a `destination` block with the arrival ' +
+    'time there and duration_seconds. Unlike /arrivals, results are unaffected by feed outages and extend ' +
+    'arbitrarily far into the future. For single-station departures right now, use /arrivals instead.',
   request: {
     query: z.object({
-      stop: z.string().openapi({ description: 'Stop ID', example: '44' }),
-      feed: z.enum(['subway', 'lirr', 'mnr']).openapi({ description: 'Feed the stop belongs to' }),
-      to: z.string().optional().openapi({ description: 'Destination stop ID to filter departures by', example: '237' }),
+      from: z.string().openapi({ description: 'Origin stop ID', example: '44' }),
+      feed: z.enum(['subway', 'lirr', 'mnr']).openapi({ description: 'Feed both stops belong to' }),
+      to: z.string({
+        message: 'required - /schedule returns trips between two stations; use /arrivals for single-station departures',
+      }).openapi({ description: 'Destination stop ID', example: '237' }),
       after: z.coerce.number({ message: 'must be a number' }).int().nonnegative({ message: 'must be >= 0' }).optional()
         .openapi({ description: 'Unix seconds cursor - only departures at or after this instant are returned. Defaults to now, or the start of `date` if `date` is given without `after`.', example: 1754651400 }),
       date: z.string().regex(YYYYMMDD, { message: 'must be YYYYMMDD' }).optional()
@@ -32,17 +35,17 @@ const getScheduleRoute = createRoute({
     }),
   },
   responses: {
-    200: { content: { 'application/json': { schema: ScheduleResponseSchema } }, description: 'Scheduled departures' },
+    200: { content: { 'application/json': { schema: ScheduleResponseSchema } }, description: 'Scheduled trips between the two stops' },
     400: { content: { 'application/json': { schema: ErrorSchema } }, description: 'Invalid parameters' },
-    404: { content: { 'application/json': { schema: ErrorSchema } }, description: 'Stop (or destination stop) not found' },
+    404: { content: { 'application/json': { schema: ErrorSchema } }, description: 'Origin or destination stop not found' },
   },
 });
 
 scheduleRouter.openapi(getScheduleRoute, (c) => {
-  const { stop, feed, to, after, date, limit } = c.req.valid('query');
+  const { from, feed, to, after, date, limit } = c.req.valid('query');
 
   try {
-    const result = getSchedule({ stopId: stop, feedId: feed, toStopId: to, after, date, limit });
+    const result = getSchedule({ fromStopId: from, feedId: feed, toStopId: to, after, date, limit });
     return c.json(result, 200 as const);
   } catch (err) {
     if (err instanceof NotFoundError) {

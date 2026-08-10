@@ -22,9 +22,11 @@ export type ScheduleRow = {
   peak_offpeak: number | null;
   pickup_type: number | null;
   drop_off_type: number | null;
-  // Populated only when a `to` filter was supplied; NULL otherwise.
-  dest_stop_id: string | null;
-  dest_stop_sequence: number | null;
+  // The destination self-join always matches, so these are always populated —
+  // except the arrival pair, which is NULL wherever the source feed publishes
+  // no arrival_time for that stop_time.
+  dest_stop_id: string;
+  dest_stop_sequence: number;
   dest_arrival_time: string | null;
   dest_arrival_seconds: number | null;
 };
@@ -70,10 +72,10 @@ export type ScheduleRow = {
  * `trips` rows already being fetched by `trip_id` is a cheap in-memory
  * comparison instead.
  *
- * When `toStopIds` is given (also platform-expanded by the caller, exactly
- * like `fromStopId` — a bare parent ID matches zero stop_times rows), this
- * self-joins `stop_times` for the same trip at a later `stop_sequence`. That
- * ordering condition is what selects the correct platform pair on each end
+ * `toStopIds` (also platform-expanded by the caller, exactly like
+ * `fromStopId` — a bare parent ID matches zero stop_times rows) self-joins
+ * `stop_times` for the same trip at a later `stop_sequence`. That ordering
+ * condition is what selects the correct platform pair on each end
  * automatically (e.g. 127→101 picks 127N; 101→127 picks 101S) — direction
  * falls out of the query and is never inferred separately. The destination
  * side stays an IN-list: it doesn't drive the ORDER BY, so it never hits
@@ -83,44 +85,33 @@ export type ScheduleRow = {
 export function getScheduledDepartures(
   feedId: FeedId,
   fromStopId: string,
-  toStopIds: string[] | null,
+  toStopIds: string[],
   serviceDate: ServiceDateFilter,
   afterSeconds: number,
   limit: number,
 ): ScheduleRow[] {
-  // `null` means "no destination filter" (plain board query). `[]` is
-  // distinct from that — a caller passing an explicit, empty destination
-  // set means "no destination platform resolved," which can never match
-  // any row, so short-circuit rather than let an empty SQL IN-list either
-  // error or (worse) silently degrade into "no filter".
-  if (toStopIds !== null && toStopIds.length === 0) return [];
+  // An empty destination set means "no destination platform resolved," which
+  // can never match any row — short-circuit rather than let an empty SQL
+  // IN-list either error or (worse) silently degrade into "no filter".
+  if (toStopIds.length === 0) return [];
 
   const activeServiceIds = getActiveServiceIds(feedId, serviceDate);
   if (!activeServiceIds.length) return [];
 
   const servicePlaceholders = activeServiceIds.map(() => '?').join(',');
-  const destStopIds = toStopIds; // narrowed: non-null here, and non-empty per the guard above
-
-  const destJoin = destStopIds
-    ? `JOIN stop_times b
-         ON b.feed_id = a.feed_id
-        AND b.trip_id = a.trip_id
-        AND b.stop_id IN (${destStopIds.map(() => '?').join(',')})
-        AND b.stop_sequence > a.stop_sequence`
-    : '';
-  const destSelect = destStopIds
-    ? `b.stop_id AS dest_stop_id, b.stop_sequence AS dest_stop_sequence,
-       b.arrival_time AS dest_arrival_time, b.arrival_seconds AS dest_arrival_seconds`
-    : `NULL AS dest_stop_id, NULL AS dest_stop_sequence,
-       NULL AS dest_arrival_time, NULL AS dest_arrival_seconds`;
 
   // Placeholders are bound in the order they appear in the compiled SQL
-  // text, not the order clauses are conceptually written in: destJoin's
+  // text, not the order clauses are conceptually written in: the dest join's
   // `?`s come first, then the WHERE clause's own — feed_id, stop_id,
   // afterSeconds, the service_id IN-list — and LIMIT's last.
-  const params: Array<string | number> = [];
-  if (destStopIds) params.push(...destStopIds);
-  params.push(feedId, fromStopId, afterSeconds, ...activeServiceIds, limit);
+  const params: Array<string | number> = [
+    ...toStopIds,
+    feedId,
+    fromStopId,
+    afterSeconds,
+    ...activeServiceIds,
+    limit,
+  ];
 
   return db
     .query<ScheduleRow, Array<string | number>>(
@@ -134,11 +125,16 @@ export function getScheduledDepartures(
          t.trip_headsign AS headsign, t.trip_short_name AS train_number,
          t.direction_id AS direction_id, a.track AS track, t.peak_offpeak AS peak_offpeak,
          a.pickup_type AS pickup_type, a.drop_off_type AS drop_off_type,
-         ${destSelect}
+         b.stop_id AS dest_stop_id, b.stop_sequence AS dest_stop_sequence,
+         b.arrival_time AS dest_arrival_time, b.arrival_seconds AS dest_arrival_seconds
        FROM stop_times a
        JOIN trips t ON t.feed_id = a.feed_id AND t.trip_id = a.trip_id
        JOIN routes r ON r.feed_id = t.feed_id AND r.route_id = t.route_id
-       ${destJoin}
+       JOIN stop_times b
+           ON b.feed_id = a.feed_id
+          AND b.trip_id = a.trip_id
+          AND b.stop_id IN (${toStopIds.map(() => '?').join(',')})
+          AND b.stop_sequence > a.stop_sequence
        WHERE a.feed_id = ? AND a.stop_id = ?
          AND a.departure_seconds IS NOT NULL
          AND a.departure_seconds >= ?
