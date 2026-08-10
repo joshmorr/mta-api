@@ -83,6 +83,24 @@ describe('runMigrations — legacy-schema rebuild', () => {
     expect(row?.stop_id).toBe('127');
   });
 
+  it('survives an index it cannot build on the stale table, and still builds the rest', () => {
+    toLegacyStopsSchema();
+
+    // idx_stops_parent covers (feed_id, parent_station), and the legacy table has
+    // no feed_id — creating it throws. A throw here would abort boot, which is the
+    // outage the no-drop refusal exists to avoid, so it must be warned and skipped.
+    expect(() => runMigrations()).not.toThrow();
+
+    const indexNames = db
+      .query<{ name: string }, []>(`SELECT name FROM sqlite_master WHERE type = 'index'`)
+      .all()
+      .map((r) => r.name);
+
+    expect(indexNames).not.toContain('idx_stops_parent');
+    // Tables that were recreated fresh are unaffected — their indexes still land.
+    expect(indexNames).toContain('idx_transfers_from');
+  });
+
   it('does not warn or rebuild on a brand-new DB with no stops table yet', () => {
     db.run('DROP TABLE IF EXISTS stop_times');
     db.run('DROP TABLE IF EXISTS trips');

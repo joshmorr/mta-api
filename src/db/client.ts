@@ -132,7 +132,20 @@ export function runMigrations(opts: { allowDestructiveRebuild?: boolean } = {}) 
   db.run(CREATE_CALENDAR_DATES);
   db.run(CREATE_FEED_META);
   db.run(CREATE_TRANSFERS);
+  // An index over a column the *existing* (stale-shape) table lacks throws, and a
+  // throw here aborts boot — the exact outage the refusal above exists to prevent.
+  // `CREATE TABLE IF NOT EXISTS` leaves an old-shape table untouched, so this is
+  // reachable whenever a schema bump lands before the matching DB is published.
+  // Warn and keep going: indexes on unaffected tables still get built, and the
+  // ones that failed are rebuilt on the next boot after a matching DB lands.
   for (const idx of CREATE_INDEXES) {
-    db.run(idx);
+    try {
+      db.run(idx);
+    } catch (err) {
+      console.error(
+        `[migrations] WARNING: skipping index — existing schema does not support it: ${idx} ` +
+        `(${err instanceof Error ? err.message : String(err)})`,
+      );
+    }
   }
 }
