@@ -55,8 +55,16 @@ All options are environment variables. Defaults work out of the box.
 
 ## Deployment
 
-Production runs on [Fly.io](https://fly.io) (`fly.toml`, `Dockerfile`). Instances
-are **read-only**: they don't build the DB themselves. Instead:
+Production runs on [Fly.io](https://fly.io) (`fly.toml`, `Dockerfile`).
+
+**Application code** ships automatically: a push to `main` runs the usual checks
+(`.github/workflows/ci.yml`), and only if they pass does the same workflow's
+`deploy` job run `flyctl deploy`. Pull requests and feature branches run checks
+only. The workflow also accepts a manual `workflow_dispatch` if you need to
+redeploy `main` without a new commit.
+
+**The database** is on its own schedule. Instances are **read-only**: they don't
+build the DB themselves. Instead:
 
 1. A scheduled GitHub Actions job (`.github/workflows/build-db.yml`) runs the
    heavy GTFS build once — it seeds a DB from the feeds, compacts it with
@@ -74,7 +82,9 @@ running `bun run seed` directly.
 
 One-time setup: `fly storage create` (Tigris bucket, public-read), mirror the
 `AWS_*` credentials into GitHub Secrets, and add a `FLY_API_TOKEN` secret plus
-`TIGRIS_BUCKET` / `FLY_APP` repo Variables.
+`TIGRIS_BUCKET` / `FLY_APP` repo Variables. The `FLY_API_TOKEN` secret and
+`FLY_APP` variable are shared by both workflows — `ci.yml` deploys with them and
+`build-db.yml` restarts with them.
 
 ---
 
