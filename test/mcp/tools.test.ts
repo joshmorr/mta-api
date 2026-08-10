@@ -281,7 +281,7 @@ describe('mta_get_schedule', () => {
 
   it('returns the real Deer Park -> Penn Station example', async () => {
     const result = await mcp.callTool('mta_get_schedule', {
-      stop: '44',
+      from: '44',
       feed: 'lirr',
       to: '237',
       date: '20240115',
@@ -289,37 +289,57 @@ describe('mta_get_schedule', () => {
     });
     expect(result.isError).toBeFalsy();
     const body = result.structuredContent as {
-      stop_name: string;
+      from_stop_name: string;
       to_stop_name: string;
       source: string;
-      departures: Array<{ destination?: { stop_name: string; duration_seconds: number } }>;
+      departures: Array<{ destination: { stop_name: string; duration_seconds: number } }>;
     };
-    expect(body.stop_name).toBe('Deer Park');
+    expect(body.from_stop_name).toBe('Deer Park');
     expect(body.to_stop_name).toBe('Penn Station');
     expect(body.source).toBe('scheduled');
     expect(body.departures).toHaveLength(1);
-    expect(body.departures[0].destination?.stop_name).toBe('Penn Station');
-    expect(body.departures[0].destination?.duration_seconds).toBeGreaterThan(0);
+    expect(body.departures[0].destination.stop_name).toBe('Penn Station');
+    expect(body.departures[0].destination.duration_seconds).toBeGreaterThan(0);
   });
 
   it('mirrors the structured content in the text block', async () => {
-    const result = await mcp.callTool('mta_get_schedule', { stop: '44', feed: 'lirr', date: '20240115' });
+    const result = await mcp.callTool('mta_get_schedule', {
+      from: '44',
+      to: '237',
+      feed: 'lirr',
+      date: '20240115',
+    });
     expect(JSON.parse(textOf(result))).toEqual(result.structuredContent);
   });
 
   it('reports an unknown stop with a mta_search_stops hint', async () => {
-    const result = await mcp.callTool('mta_get_schedule', { stop: 'nope', feed: 'lirr' });
+    const result = await mcp.callTool('mta_get_schedule', { from: 'nope', to: '237', feed: 'lirr' });
     expect(result.isError).toBe(true);
     expect(textOf(result)).toMatch(/mta_search_stops/);
   });
 
   it('rejects a call with no feed rather than guessing one', async () => {
-    const result = await mcp.callTool('mta_get_schedule', { stop: '44' });
+    const result = await mcp.callTool('mta_get_schedule', { from: '44', to: '237' });
+    expect(result.isError).toBe(true);
+  });
+
+  it('rejects a call with no destination rather than falling back to a single-stop board', async () => {
+    const result = await mcp.callTool('mta_get_schedule', { from: '44', feed: 'lirr' });
+    expect(result.isError).toBe(true);
+  });
+
+  it('rejects the pre-rename `stop` argument', async () => {
+    const result = await mcp.callTool('mta_get_schedule', { stop: '44', to: '237', feed: 'lirr' });
     expect(result.isError).toBe(true);
   });
 
   it('rejects an unknown argument', async () => {
-    const result = await mcp.callTool('mta_get_schedule', { stop: '44', feed: 'lirr', route: 'bogus' });
+    const result = await mcp.callTool('mta_get_schedule', {
+      from: '44',
+      to: '237',
+      feed: 'lirr',
+      route: 'bogus',
+    });
     expect(result.isError).toBe(true);
   });
 });

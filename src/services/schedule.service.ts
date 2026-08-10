@@ -72,9 +72,9 @@ function resolvePlatformIds(feedId: FeedId, stopId: string): string[] {
 }
 
 export interface ScheduleParams {
-  stopId: string;
+  fromStopId: string;
   feedId: FeedId;
-  toStopId?: string;
+  toStopId: string;
   /** Unix seconds. Defaults to `date`'s start-of-day, or now if `date` is also absent. */
   after?: number;
   /** YYYYMMDD. Pins the query to a single service date instead of the default 3-day window. */
@@ -83,14 +83,14 @@ export interface ScheduleParams {
 }
 
 export function getSchedule(params: ScheduleParams, now: Date = new Date()): ScheduleResponse {
-  const { stopId, feedId, toStopId, after, date, limit } = params;
+  const { fromStopId, feedId, toStopId, after, date, limit } = params;
   const generatedAt = Math.floor(now.getTime() / 1000);
 
-  const stop = resolveStop(stopId, feedId);
-  const fromPlatformIds = resolvePlatformIds(stop.feed_id, stop.stop_id);
+  const fromStop = resolveStop(fromStopId, feedId, 'Origin stop');
+  const fromPlatformIds = resolvePlatformIds(fromStop.feed_id, fromStop.stop_id);
 
-  const toStop = toStopId ? resolveStop(toStopId, stop.feed_id, 'Destination stop') : null;
-  const toPlatformIds = toStop ? resolvePlatformIds(stop.feed_id, toStop.stop_id) : null;
+  const toStop = resolveStop(toStopId, fromStop.feed_id, 'Destination stop');
+  const toPlatformIds = resolvePlatformIds(fromStop.feed_id, toStop.stop_id);
 
   const candidateDates: ServiceDateFilter[] = date
     ? [{ date, weekdayColumn: weekdayColumnForDate(date) }]
@@ -121,7 +121,7 @@ export function getSchedule(params: ScheduleParams, now: Date = new Date()): Sch
     if (afterSeconds > MAX_DEPARTURE_SECONDS) continue;
 
     for (const platformId of fromPlatformIds) {
-      const rows = getScheduledDepartures(stop.feed_id, platformId, toPlatformIds, cd, afterSeconds, limit);
+      const rows = getScheduledDepartures(fromStop.feed_id, platformId, toPlatformIds, cd, afterSeconds, limit);
       for (const row of rows) {
         candidates.push({ row, serviceDate: cd.date, departureTimestamp: originUnix + row.departure_seconds });
       }
@@ -143,11 +143,11 @@ export function getSchedule(params: ScheduleParams, now: Date = new Date()): Sch
       : null;
 
   return {
-    feed_id: stop.feed_id,
-    stop_id: stop.stop_id,
-    stop_name: stop.stop_name,
-    to_stop_id: toStop?.stop_id ?? null,
-    to_stop_name: toStop?.stop_name ?? null,
+    feed_id: fromStop.feed_id,
+    from_stop_id: fromStop.stop_id,
+    from_stop_name: fromStop.stop_name,
+    to_stop_id: toStop.stop_id,
+    to_stop_name: toStop.stop_name,
     service_dates: candidateDates.map((d) => d.date),
     generated_at: generatedAt,
     source: 'scheduled',
@@ -160,28 +160,25 @@ function toScheduledDeparture(
   row: ScheduleRow,
   serviceDate: string,
   departureTimestamp: number,
-  toStop: StopRow | null,
+  toStop: StopRow,
   nowUnix: number,
 ): ScheduledDeparture {
   const originUnix = getServiceDayOriginUnix(serviceDate);
   const arrivalTimestamp = row.arrival_seconds !== null ? originUnix + row.arrival_seconds : null;
   const { route_name, route_long_name } = toRouteNames(row.route_id, row);
 
-  let destination: ScheduledDeparture['destination'];
-  if (toStop && row.dest_stop_id !== null) {
-    const destArrivalTimestamp = row.dest_arrival_seconds !== null ? originUnix + row.dest_arrival_seconds : null;
-    destination = {
-      // The canonical requested `to` stop, not the specific matched
-      // platform - every departure in a `to`-filtered response describes
-      // the same destination the caller asked for.
-      stop_id: toStop.stop_id,
-      stop_name: toStop.stop_name,
-      stop_sequence: row.dest_stop_sequence!,
-      arrival_time: row.dest_arrival_time,
-      arrival_timestamp: destArrivalTimestamp,
-      duration_seconds: destArrivalTimestamp !== null ? destArrivalTimestamp - departureTimestamp : null,
-    };
-  }
+  const destArrivalTimestamp = row.dest_arrival_seconds !== null ? originUnix + row.dest_arrival_seconds : null;
+  const destination: ScheduledDeparture['destination'] = {
+    // The canonical requested `to` stop, not the specific matched platform -
+    // every departure in the response describes the same destination the
+    // caller asked for.
+    stop_id: toStop.stop_id,
+    stop_name: toStop.stop_name,
+    stop_sequence: row.dest_stop_sequence,
+    arrival_time: row.dest_arrival_time,
+    arrival_timestamp: destArrivalTimestamp,
+    duration_seconds: destArrivalTimestamp !== null ? destArrivalTimestamp - departureTimestamp : null,
+  };
 
   return {
     feed_id: row.feed_id,
@@ -205,7 +202,7 @@ function toScheduledDeparture(
     peak: normalizePeak(row.peak_offpeak),
     pickup_type: row.pickup_type,
     drop_off_type: row.drop_off_type,
-    ...(destination ? { destination } : {}),
+    destination,
   };
 }
 

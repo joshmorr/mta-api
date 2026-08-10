@@ -187,31 +187,32 @@ export function registerMtaTools(server: McpServer): void {
   server.registerTool(
     'mta_get_schedule',
     {
-      title: 'Get the static timetable for an MTA stop',
+      title: 'Get scheduled MTA trips between two stations',
       description:
-        'Scheduled departures from a stop, sourced from the static GTFS timetable rather than a realtime ' +
+        'Scheduled trips from `from` to `to`, sourced from the static GTFS timetable rather than a realtime ' +
         `feed. ${FEED_NOTE}\n\n` +
+        'Both stops are required: every returned departure is one whose trip reaches `to` later, and each ' +
+        'carries a `destination` object with the arrival time there and duration_seconds. Direction is ' +
+        'implied by the pair, so there is no direction parameter.\n\n' +
         'Unlike mta_get_arrivals, results are unaffected by feed outages and extend arbitrarily far into the ' +
-        'future or past: use `date` to look up a specific day\'s whole timetable, or the default rolling ' +
-        '[yesterday, today, tomorrow] window with `after` (Unix seconds) to page forward through it. Give ' +
-        '`to` to filter to departures whose trip reaches a specific destination stop — each then carries a ' +
-        '`destination` object with the arrival time there and duration_seconds.\n\n' +
+        'future or past: use `date` to look up a specific day, or the default rolling ' +
+        '[yesterday, today, tomorrow] window with `after` (Unix seconds) to page forward through it.\n\n' +
         `${ROUTE_NAME_NOTE}\n\n` +
-        'Answers "what time do trains run" or "how do I get from A to B and how long does it take" — for ' +
-        '"when is the next train right now" prefer mta_get_arrivals instead, since this tool cannot see live ' +
-        'delays, reroutes, or cancellations.\n\n' +
-        'Use mta_search_stops first to turn a station name into an ID.',
+        'Answers "how do I get from A to B, when does it run, and how long does it take". For departures ' +
+        'from a single station with no destination in mind, or "when is the next train right now", use ' +
+        'mta_get_arrivals instead — this tool cannot see live delays, reroutes, or cancellations.\n\n' +
+        'Use mta_search_stops first to turn station names into IDs.',
       inputSchema: GetScheduleInput,
       outputSchema: ScheduleResponseSchema,
       annotations: STATIC,
     },
-    async ({ stop, feed, to, after, date, limit }) => {
+    async ({ from, feed, to, after, date, limit }) => {
       try {
-        return ok(getSchedule({ stopId: stop, feedId: feed, toStopId: to, after, date, limit }));
+        return ok(getSchedule({ fromStopId: from, feedId: feed, toStopId: to, after, date, limit }));
       } catch (err) {
         return toNotFoundToolError(
           err,
-          `Check the stop (and destination, if given) exist in the ${feed} feed with mta_search_stops.`,
+          `Check both stops exist in the ${feed} feed with mta_search_stops.`,
         );
       }
     },

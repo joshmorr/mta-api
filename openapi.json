@@ -724,19 +724,17 @@
             "description": "Transit feed identifier",
             "example": "subway"
           },
-          "stop_id": {
+          "from_stop_id": {
             "type": "string"
           },
-          "stop_name": {
+          "from_stop_name": {
             "type": "string"
           },
           "to_stop_id": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "to_stop_name": {
-            "type": "string",
-            "nullable": true
+            "type": "string"
           },
           "service_dates": {
             "type": "array",
@@ -768,8 +766,8 @@
         },
         "required": [
           "feed_id",
-          "stop_id",
-          "stop_name",
+          "from_stop_id",
+          "from_stop_name",
           "to_stop_id",
           "to_stop_name",
           "service_dates",
@@ -914,7 +912,8 @@
           "track",
           "peak",
           "pickup_type",
-          "drop_off_type"
+          "drop_off_type",
+          "destination"
         ]
       },
       "ScheduledDepartureDestination": {
@@ -951,7 +950,7 @@
           "arrival_timestamp",
           "duration_seconds"
         ],
-        "description": "Present only when `to` was given."
+        "description": "Where this trip reaches the requested `to` stop, including duration_seconds."
       },
       "TripScheduleResponse": {
         "type": "object",
@@ -1737,18 +1736,18 @@
           "Schedule"
         ],
         "operationId": "getSchedule",
-        "summary": "Get the static timetable for a stop",
-        "description": "Returns scheduled departures from a stop, sourced from the static GTFS timetable (not realtime). Unlike /arrivals, results are unaffected by feed outages and extend arbitrarily far into the future. Provide `to` to filter to departures that reach a specific destination stop, with duration_seconds included.",
+        "summary": "Get scheduled trips between two stations",
+        "description": "Returns scheduled trips from `from` to `to`, sourced from the static GTFS timetable (not realtime). Every departure reaches `to` later in its trip and carries a `destination` block with the arrival time there and duration_seconds. Unlike /arrivals, results are unaffected by feed outages and extend arbitrarily far into the future. For single-station departures right now, use /arrivals instead.",
         "parameters": [
           {
             "schema": {
               "type": "string",
-              "description": "Stop ID",
+              "description": "Origin stop ID",
               "example": "44"
             },
             "required": true,
-            "description": "Stop ID",
-            "name": "stop",
+            "description": "Origin stop ID",
+            "name": "from",
             "in": "query"
           },
           {
@@ -1759,21 +1758,21 @@
                 "lirr",
                 "mnr"
               ],
-              "description": "Feed the stop belongs to"
+              "description": "Feed both stops belong to"
             },
             "required": true,
-            "description": "Feed the stop belongs to",
+            "description": "Feed both stops belong to",
             "name": "feed",
             "in": "query"
           },
           {
             "schema": {
               "type": "string",
-              "description": "Destination stop ID to filter departures by",
+              "description": "Destination stop ID",
               "example": "237"
             },
-            "required": false,
-            "description": "Destination stop ID to filter departures by",
+            "required": true,
+            "description": "Destination stop ID",
             "name": "to",
             "in": "query"
           },
@@ -1819,7 +1818,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Scheduled departures",
+            "description": "Scheduled trips between the two stops",
             "content": {
               "application/json": {
                 "schema": {
@@ -1839,7 +1838,7 @@
             }
           },
           "404": {
-            "description": "Stop (or destination stop) not found",
+            "description": "Origin or destination stop not found",
             "content": {
               "application/json": {
                 "schema": {

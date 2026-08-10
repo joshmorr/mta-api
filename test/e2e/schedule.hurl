@@ -5,19 +5,24 @@
 # thing a forgotten cacheHeaders.ts prefix silently drops, and in-process
 # bun:test never sees real HTTP response headers.
 
-# --- board query returns the documented shape, with Cache-Control ------------
-GET {{base}}/schedule?stop=127&feed=subway&limit=5
+# --- pair query returns the documented shape, with Cache-Control -------------
+# Times Sq-42 St(127) -> 34 St-Penn Station(128), one stop down the 1 line.
+# The 1 runs 24/7, so the default rolling window always has departures.
+GET {{base}}/schedule?from=127&to=128&feed=subway&limit=5
 HTTP 200
 [Asserts]
 header "Cache-Control" exists
 jsonpath "$.feed_id" == "subway"
-jsonpath "$.stop_id" == "127"
+jsonpath "$.from_stop_id" == "127"
+jsonpath "$.to_stop_id" == "128"
 jsonpath "$.source" == "scheduled"
 jsonpath "$.service_dates" isCollection
 jsonpath "$.departures" isCollection
 jsonpath "$.departures" count <= 5
 jsonpath "$.departures[0].trip_id" isString
 jsonpath "$.departures[0].departure_timestamp" isInteger
+jsonpath "$.departures[0].destination.stop_id" == "128"
+jsonpath "$.departures[0].destination.duration_seconds" > 0
 [Captures]
 first_trip_id: jsonpath "$.departures[0].trip_id"
 
@@ -34,27 +39,41 @@ jsonpath "$.origin.stop_id" isString
 jsonpath "$.destination.stop_id" isString
 
 # --- known stable A->B: LIRR Deer Park(44) -> Penn Station(237) --------------
-GET {{base}}/schedule?stop=44&feed=lirr&to=237&limit=3
+GET {{base}}/schedule?from=44&to=237&feed=lirr&limit=3
 HTTP 200
 [Asserts]
-jsonpath "$.stop_name" contains "Deer Park"
+jsonpath "$.from_stop_name" contains "Deer Park"
 jsonpath "$.to_stop_name" contains "Penn"
 jsonpath "$.departures[0].destination.stop_name" contains "Penn"
 jsonpath "$.departures[0].destination.duration_seconds" > 0
 
 # --- date pins to a single service date, not the default 3-day window -------
-GET {{base}}/schedule?stop=127&feed=subway&date=20260101&limit=1
+GET {{base}}/schedule?from=127&to=128&feed=subway&date=20260101&limit=1
 HTTP 200
 [Asserts]
 jsonpath "$.service_dates" count == 1
 jsonpath "$.service_dates[0]" == "20260101"
 
 # --- invalid param -> 400 INVALID_PARAM envelope ------------------------------
-GET {{base}}/schedule?stop=127&feed=subway&date=not-a-date
+GET {{base}}/schedule?from=127&to=128&feed=subway&date=not-a-date
 HTTP 400
 [Asserts]
 jsonpath "$.code" == "INVALID_PARAM"
 jsonpath "$.error" contains "date"
+
+# --- a missing destination is a 400 that names /arrivals, not a board --------
+GET {{base}}/schedule?from=127&feed=subway
+HTTP 400
+[Asserts]
+jsonpath "$.code" == "INVALID_PARAM"
+jsonpath "$.error" contains "/arrivals"
+
+# --- unknown origin/destination -> 404 NOT_FOUND envelope ---------------------
+GET {{base}}/schedule?from=44&to=zzzzz&feed=lirr
+HTTP 404
+[Asserts]
+jsonpath "$.code" == "NOT_FOUND"
+jsonpath "$.error" contains "Destination stop"
 
 # --- unknown trip -> 404 NOT_FOUND envelope -----------------------------------
 GET {{base}}/trips/zzzzz-not-a-real-trip?feed=lirr
