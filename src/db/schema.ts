@@ -128,4 +128,9 @@ export const CREATE_INDEXES = [
   `CREATE INDEX IF NOT EXISTS idx_routes_type        ON routes(feed_id, route_type)`,
   `CREATE INDEX IF NOT EXISTS idx_calendar_dates     ON calendar_dates(feed_id, date)`,
   `CREATE INDEX IF NOT EXISTS idx_transfers_from     ON transfers(feed_id, from_stop_id)`,
+  // Platform fan-out: searchStops resolves platforms once per returned row and
+  // getStopDetail once per request, both filtering on (feed_id, parent_station).
+  // Without this, parent_station is unindexed and each call range-scans the whole
+  // feed (1,488 subway rows) behind a feed_id-only seek. ~40KB, so no artifact concern.
+  `CREATE INDEX IF NOT EXISTS idx_stops_parent       ON stops(feed_id, parent_station)`,
 ];
