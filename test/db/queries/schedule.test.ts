@@ -26,10 +26,10 @@ describe('db/queries/schedule', () => {
   });
 
   describe('getScheduledDepartures', () => {
-    it('returns board departures ordered by departure_seconds, past the after bound', () => {
+    it('returns departures that reach the destination, ordered by departure_seconds', () => {
       seedSubwaySchedule();
-      // T-LOCAL departs 101N at 09:00:00 (32400s); T-LATE has no stop_time at 101N.
-      const rows = getScheduledDepartures('subway', '101N', null, MONDAY, 0, 10);
+      // T-LOCAL departs 101N at 09:00:00 (32400s) and reaches 127N at 09:30.
+      const rows = getScheduledDepartures('subway', '101N', ['127N'], MONDAY, 0, 10);
       expect(rows.map((r) => r.trip_id)).toEqual(['T-LOCAL']);
       expect(rows[0]).toMatchObject({
         route_id: '1',
@@ -37,37 +37,54 @@ describe('db/queries/schedule', () => {
         stop_sequence: 1,
         departure_seconds: 9 * 3600,
         headsign: null,
-        dest_stop_id: null,
+        dest_stop_id: '127N',
       });
     });
 
     it('excludes departures at or before afterSeconds', () => {
       seedSubwaySchedule();
-      const before = getScheduledDepartures('subway', '101N', null, MONDAY, 9 * 3600, 10);
+      const before = getScheduledDepartures('subway', '101N', ['127N'], MONDAY, 9 * 3600, 10);
       expect(before).toHaveLength(1); // >= is inclusive
-      const after = getScheduledDepartures('subway', '101N', null, MONDAY, 9 * 3600 + 1, 10);
+      const after = getScheduledDepartures('subway', '101N', ['127N'], MONDAY, 9 * 3600 + 1, 10);
       expect(after).toHaveLength(0);
     });
 
     it('respects limit', () => {
       seedSubwaySchedule();
-      // T-LOCAL (09:30) and T-LATE (25:30) both stop at 127N on Monday.
-      const rows = getScheduledDepartures('subway', '127N', null, MONDAY, 0, 1);
-      expect(rows).toHaveLength(1);
+      // A second 101N -> 127N trip, seeded here rather than in the shared
+      // fixture (six suites assert against its exact current shape). Two
+      // matching trips is the minimum that makes LIMIT observable.
+      db.run(
+        `INSERT INTO trips (feed_id, trip_id, route_id, service_id, direction_id, shape_id)
+         VALUES ('subway', 'T-LOCAL-2', '1', 'WKDY', 0, NULL)`,
+      );
+      db.run(
+        `INSERT INTO stop_times
+           (feed_id, trip_id, stop_id, arrival_time, departure_time, stop_sequence, arrival_seconds, departure_seconds)
+         VALUES
+           ('subway', 'T-LOCAL-2', '101N', '09:15:00', '09:15:00', 1, ${9 * 3600 + 900}, ${9 * 3600 + 900}),
+           ('subway', 'T-LOCAL-2', '127N', '09:45:00', '09:45:00', 2, ${9 * 3600 + 2700}, ${9 * 3600 + 2700})`,
+      );
+
+      expect(getScheduledDepartures('subway', '101N', ['127N'], MONDAY, 0, 10).map((r) => r.trip_id))
+        .toEqual(['T-LOCAL', 'T-LOCAL-2']);
+      expect(getScheduledDepartures('subway', '101N', ['127N'], MONDAY, 0, 1).map((r) => r.trip_id))
+        .toEqual(['T-LOCAL']);
     });
 
     it('excludes rows with no departure_seconds', () => {
       seedSubwaySchedule();
-      // seedSubway's T1 stop_time at 127S has no arrival/departure_seconds
-      // populated (raw INSERT omits those columns) - it must not appear.
-      const rows = getScheduledDepartures('subway', '127S', null, MONDAY, 0, 10);
+      // seedSubway's T1 runs 127N -> 127S, but neither stop_time has
+      // arrival/departure_seconds populated (the raw INSERT omits those
+      // columns) - so the pair matches the join yet must not appear.
+      const rows = getScheduledDepartures('subway', '127N', ['127S'], MONDAY, 0, 10);
       expect(rows).toEqual([]);
     });
 
     it('excludes a trip whose service is not active on the queried date, even though it stops there', () => {
       seedSubwaySchedule();
       // T-LOCAL/T-LATE run WKDY (Mon-Fri); Sunday is inactive for them.
-      const rows = getScheduledDepartures('subway', '101N', null, SUNDAY, 0, 10);
+      const rows = getScheduledDepartures('subway', '101N', ['127N'], SUNDAY, 0, 10);
       expect(rows).toEqual([]);
     });
 
@@ -78,7 +95,7 @@ describe('db/queries/schedule', () => {
       const rows = getScheduledDepartures(
         'subway',
         '101N',
-        null,
+        ['127N'],
         { date: '20240120', weekdayColumn: 'saturday' },
         0,
         10,
@@ -86,59 +103,58 @@ describe('db/queries/schedule', () => {
       expect(rows.map((r) => r.trip_id)).toEqual(['T-LOCAL']);
     });
 
-    describe('with a `to` filter (platform-expanded destination self-join)', () => {
-      it('resolves a real LIRR A->B trip end to end (Deer Park -> Penn via Wyandanch)', () => {
-        seedLirrSchedule();
-        const rows = getScheduledDepartures('lirr', '44', ['237'], MONDAY, 0, 10);
-        expect(rows).toHaveLength(1);
-        expect(rows[0]).toMatchObject({
-          trip_id: 'GO201_26_SCHED',
-          stop_id: '44',
-          stop_sequence: 1,
-          dest_stop_id: '237',
-          dest_stop_sequence: 3,
-          dest_arrival_time: '13:30:00',
-          dest_arrival_seconds: 13 * 3600 + 30 * 60,
-        });
+    it('resolves a real LIRR A->B trip end to end (Deer Park -> Penn via Wyandanch)', () => {
+      seedLirrSchedule();
+      const rows = getScheduledDepartures('lirr', '44', ['237'], MONDAY, 0, 10);
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({
+        trip_id: 'GO201_26_SCHED',
+        stop_id: '44',
+        stop_sequence: 1,
+        dest_stop_id: '237',
+        dest_stop_sequence: 3,
+        dest_arrival_time: '13:30:00',
+        dest_arrival_seconds: 13 * 3600 + 30 * 60,
       });
+    });
 
-      it('picks the correct destination platform automatically via stop_sequence ordering (subway)', () => {
-        seedSubwaySchedule();
-        // to=127 (parent, expands to 127N/127S). T-LOCAL only ever visits
-        // the N platform, so the join must land on 127N, never 127S.
-        const rows = getScheduledDepartures('subway', '101N', ['127N', '127S'], MONDAY, 0, 10);
-        expect(rows).toHaveLength(1);
-        expect(rows[0]).toMatchObject({
-          trip_id: 'T-LOCAL',
-          stop_id: '101N',
-          dest_stop_id: '127N',
-          dest_stop_sequence: 3,
-        });
+    it('picks the correct destination platform automatically via stop_sequence ordering (subway)', () => {
+      seedSubwaySchedule();
+      // to=127 (parent, expands to 127N/127S). T-LOCAL only ever visits
+      // the N platform, so the join must land on 127N, never 127S.
+      const rows = getScheduledDepartures('subway', '101N', ['127N', '127S'], MONDAY, 0, 10);
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({
+        trip_id: 'T-LOCAL',
+        stop_id: '101N',
+        dest_stop_id: '127N',
+        dest_stop_sequence: 3,
       });
+    });
 
-      it('returns [] in the reverse direction (destination stop_sequence not after origin)', () => {
-        seedLirrSchedule();
-        const rows = getScheduledDepartures('lirr', '237', ['44'], MONDAY, 0, 10);
-        expect(rows).toEqual([]);
-      });
+    it('returns [] in the reverse direction (destination stop_sequence not after origin)', () => {
+      seedLirrSchedule();
+      const rows = getScheduledDepartures('lirr', '237', ['44'], MONDAY, 0, 10);
+      expect(rows).toEqual([]);
+    });
 
-      it('short-circuits to [] when toStopIds is an empty array, distinct from null (no filter)', () => {
-        seedLirrSchedule();
-        expect(getScheduledDepartures('lirr', '44', [], MONDAY, 0, 10)).toEqual([]);
-        expect(getScheduledDepartures('lirr', '44', null, MONDAY, 0, 10)).toHaveLength(1);
-      });
+    it('short-circuits to [] when toStopIds is empty rather than degrading into no filter', () => {
+      seedLirrSchedule();
+      expect(getScheduledDepartures('lirr', '44', [], MONDAY, 0, 10)).toEqual([]);
+      // Sanity: the same query with a real destination does match.
+      expect(getScheduledDepartures('lirr', '44', ['237'], MONDAY, 0, 10)).toHaveLength(1);
+    });
 
-      it('resolves a real MNR A->B trip end to end (Grand Central -> Stamford via Harlem-125 St)', () => {
-        seedMnrSchedule();
-        const rows = getScheduledDepartures('mnr', '1', ['124'], MONDAY, 0, 10);
-        expect(rows).toHaveLength(1);
-        expect(rows[0]).toMatchObject({
-          trip_id: 'MNR-SCHED-1',
-          headsign: 'Stamford',
-          dest_stop_id: '124',
-          dest_stop_sequence: 3,
-          dest_arrival_time: '09:56:00',
-        });
+    it('resolves a real MNR A->B trip end to end (Grand Central -> Stamford via Harlem-125 St)', () => {
+      seedMnrSchedule();
+      const rows = getScheduledDepartures('mnr', '1', ['124'], MONDAY, 0, 10);
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({
+        trip_id: 'MNR-SCHED-1',
+        headsign: 'Stamford',
+        dest_stop_id: '124',
+        dest_stop_sequence: 3,
+        dest_arrival_time: '09:56:00',
       });
     });
   });
