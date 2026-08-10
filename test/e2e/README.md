@@ -47,7 +47,7 @@ BASE_URL=https://mta-api-restless-pond-4321.fly.dev \
 |---|---|---|---|
 | `contract.hurl` | 1 | seeded+ready server | validation 400s, 404s, `{error,code}` envelope, rate-limit / Server-Timing headers, `/doc`. Independent of *which* data is seeded. |
 | `stops.hurl` | 2 | seeded data | stop/route shape + stable GTFS IDs (e.g. subway `127` = Times Sq–42 St). Shows capture→chain. |
-| `schedule.hurl` | 2 | seeded data | `/schedule` + `/trips/{trip_id}` shape, the LIRR Deer Park(44)→Penn Station(237) stable A→B pair, `date` pinning, and the `Cache-Control` header — the one thing a forgotten `cacheHeaders.ts` prefix silently drops, invisible to in-process `bun:test`. |
+| `schedule.hurl` | 2 | seeded data | `/schedule` + `/trips/{trip_id}` shape against two stable A→B pairs (subway Times Sq(127)→34 St-Penn(128), LIRR Deer Park(44)→Penn Station(237)), `date` pinning, the 400 when `to` is omitted, and the `Cache-Control` header — the one thing a forgotten `cacheHeaders.ts` prefix silently drops, invisible to in-process `bun:test`. |
 | `realtime.hurl` | 3 | live MTA feeds | arrivals/vehicles. Non-deterministic — asserts loosely (status range + JSON). Keep out of required CI. |
 
 ## CI
