@@ -197,6 +197,23 @@ export const AlertSchema = z.object({
   header: z.string(),
   description: z.string(),
   active_periods: z.array(ActivePeriodSchema),
+  alert_type: z.string().nullable().openapi({
+    description:
+      "What kind of alert this is, in the MTA's own vocabulary. The only such signal - the MTA never populates the standard GTFS-RT cause/effect.",
+    example: 'Planned - Substitute Buses',
+  }),
+  priority: z.number().nullable().openapi({
+    description:
+      "Severity rank, 1 (lowest) to 35 (highest, = Suspended), over the MTA's shared status list. The highest rank across this alert's informed entities; sort descending for the worst disruptions first.",
+    example: 26,
+  }),
+  human_readable_active_period: z.string().nullable().openapi({
+    description: 'Prose summary of all active periods.',
+    example: 'Aug 22 - 24, Sat 1:15 AM to Mon 4:00 AM',
+  }),
+  updated_at: z.number().nullable().openapi({
+    description: 'Unix timestamp of the last change to this alert',
+  }),
 }).openapi('Alert');
 
 export const AlertListResponseSchema = z.object({

@@ -1,7 +1,14 @@
 import { getFeed } from '../cache/rtCache';
 import { ALERTS_FEED_PATH } from './feed.service';
 import type { AlertResponse, InformedEntity } from '../types/api';
-import { toNumber, getEnglishText } from '../utils/realtime';
+import {
+  toNumber,
+  getEnglishText,
+  mercuryAlert,
+  mercurySortOrder,
+  nonEmpty,
+  priorityFromSortOrder,
+} from '../utils/realtime';
 
 export async function fetchAlerts(): Promise<{
   generated_at: number;
@@ -18,6 +25,11 @@ export async function fetchAlerts(): Promise<{
     if (!entity.alert) continue;
     const a = entity.alert;
 
+    // The Mercury rank lives per informed entity, but ranking a list of alerts
+    // needs one number per alert, so take the highest across them. Ranks run
+    // 1 (lowest) to 35 (highest, = Suspended) over the MTA's shared list.
+    let priority: number | null = null;
+
     const informed_entities: InformedEntity[] = a.informedEntity.map((e) => {
       const ie: InformedEntity = {};
       if (e.agencyId) ie.agency_id = e.agencyId;
@@ -28,6 +40,10 @@ export async function fetchAlerts(): Promise<{
       if (Object.prototype.hasOwnProperty.call(e, 'directionId')) {
         if (e.directionId === 0 || e.directionId === 1) ie.direction_id = e.directionId;
       }
+
+      const rank = priorityFromSortOrder(mercurySortOrder(e));
+      if (rank !== null && (priority === null || rank > priority)) priority = rank;
+
       return ie;
     });
 
@@ -36,12 +52,22 @@ export async function fetchAlerts(): Promise<{
       end: toNumber(p.end),
     }));
 
+    // The MTA never sets the standard cause/effect, so what kind of alert this
+    // is lives entirely in the Mercury extension.
+    const mercury = mercuryAlert(a);
+
     alerts.push({
       id: entity.id,
       informed_entities,
       header: getEnglishText(a.headerText),
       description: getEnglishText(a.descriptionText),
       active_periods,
+      alert_type: nonEmpty(mercury?.alertType),
+      priority,
+      human_readable_active_period: nonEmpty(
+        getEnglishText(mercury?.humanReadableActivePeriod ?? undefined),
+      ),
+      updated_at: mercury?.updatedAt !== undefined ? toNumber(mercury.updatedAt) : null,
     });
   }
 
