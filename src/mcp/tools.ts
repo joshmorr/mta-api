@@ -264,6 +264,11 @@ export function registerMtaTools(server: McpServer): void {
         'Direction is feed-honest, not uniform: subway `direction` (NORTH/SOUTH) comes from the matched ' +
         'platform, LIRR `direction_id` (0/1) is branch-relative (not compass) and comes straight from the ' +
         "railroad, and Metro-North has neither - its direction IS `destination`.\n\n" +
+        'LIRR and Metro-North also carry `track` (the assigned track at this stop - the thing a rider at ' +
+        'Penn or Grand Central actually needs) and Metro-North carries `train_status`: On-Time, Late, ' +
+        'Delayed, Departed, Arriving, Arrived, Canceled, or Bus. Both are null on subway. Note that ' +
+        '`train_status` is the ONLY cancellation signal Metro-North publishes, and cancelled trains are ' +
+        'still returned in the list - check it before telling someone their train is running.\n\n' +
         `${ROUTE_NAME_NOTE}\n\n` +
         'Answers "when is the next train". Use mta_search_stops first to turn a station name into an ID.\n\n' +
         'The response carries `stale: true` when the upstream feed could not be reached and cached data ' +
@@ -317,6 +322,12 @@ export function registerMtaTools(server: McpServer): void {
         '(route, stop, direction) selectors it names. Unlike the other tools this one is not ' +
         'feed-scoped: alerts for all three systems come from a single upstream feed and are returned ' +
         'together, so filter by route or stop instead.\n\n' +
+        '`alert_type` names the kind of disruption in the MTA\'s own words - Delays, Cancellations, ' +
+        'Detour, Station Notice, Planned - Substitute Buses, and so on - and `priority` ranks severity ' +
+        'from 1 (lowest) to 35 (Suspended). Sort by `priority` descending to lead with the worst ' +
+        'disruption rather than whichever alert happened to come first. `human_readable_active_period` ' +
+        'is the MTA\'s own prose summary of when an alert applies, e.g. "Sundays in May from 10:45pm ' +
+        'to midnight" - prefer quoting it over rendering raw timestamps.\n\n' +
         'Answers "is anything wrong with the L train" or "why is my train delayed".\n\n' +
         'Alert descriptions are long. Narrow with `routes` or `stop_id` rather than raising `limit`; ' +
         'the response sets `truncated: true` and `total_matched` when `limit` dropped matching alerts.',

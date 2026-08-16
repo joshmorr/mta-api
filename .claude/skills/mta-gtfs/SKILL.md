@@ -109,9 +109,12 @@ Read the one that matches what you're touching; each is self-contained.
 
 Business logic belongs in `src/services/` — it is the shared layer behind both the HTTP
 routers and the MCP tools, so a quirk handled in a handler is a quirk still unhandled for
-MCP clients. `src/proto/gtfs-realtime.proto` is the unmodified upstream definition, which
-means MTA's vendor extension fields are decoded away silently; that is a deliberate
-choice, not an oversight, and `rt-probe.ts --extensions` shows what is being dropped.
+MCP clients. `src/proto/` vendors the MTARR (LIRR/MNR) and Mercury (alerts) extensions
+next to the stock `gtfs-realtime.proto`, and `src/cache/rtCache.ts` loads all three into
+one protobufjs root, so their fields survive decoding. The NYCT subway extensions are
+still dropped — they collide with Mercury on `FeedHeader` field 1001. See
+`references/realtime.md` §vendor proto extensions before touching any of this;
+`rt-probe.ts --extensions` shows what is on the wire.
 
 Two habits that keep this from rotting: when you discover feed behavior that contradicts
 a reference file here, fix the reference file and date it; and when a quirk gets handled

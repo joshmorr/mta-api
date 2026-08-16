@@ -209,13 +209,35 @@ What they add:
   `06 0123+ PEL/BBR`), `is_assigned` (whether a physical train is assigned to the trip,
   i.e. whether the prediction is real or purely scheduled), a `direction` enum
   (`NORTH`/`SOUTH`/`EAST`/`WEST`), and `scheduled_track`/`actual_track`.
-- **MTARR** — track assignment and train status text for LIRR/MNR.
-- **Mercury** — `alert_type`, human-readable created/updated timestamps, and
-  screen-formatted alert text variants.
+- **MTARR** (`MtaRailroadStopTimeUpdate`) — `track` and `trainStatus` for LIRR/MNR. Both are
+  `optional string`, and the railroads publish `''` rather than omitting them, so presence
+  checks don't work — test for a non-empty value. LIRR populates `track` only; MNR populates
+  both, with `trainStatus` drawn from `On-Time`, `Late`, `Delayed`, `Departed`, `Arriving`,
+  `Arrived`, `Canceled`, `Bus`. A separate `MtaRailroadCarriageDetails` (bikes, quiet car,
+  toilets) exists but neither feed emits `multi_carriage_details` today, so it is dead.
+- **Mercury** (`MercuryAlert`, `MercuryEntitySelector`) — `alert_type`, created/updated
+  timestamps, `human_readable_active_period` prose, station alternatives, and a per-informed-
+  entity `sort_order` of the form `GTFS-ID:Priority` (e.g. `MTASBWY:F:26`). The GTFS ID
+  itself contains colons, so the rank is the segment after the *last* one.
 
-Ignoring them is a legitimate choice. The two things it costs are `is_assigned`, the only
-clean way to tell a real prediction from a schedule-derived one, and the NYCT `direction`
-enum, the only *documented* direction signal in the subway RT feed.
+**This repo decodes MTARR and Mercury** (as of 2026-08-16). `src/proto/` vendors
+`gtfs-realtime-MTARR.proto` and `gtfs-realtime-service-status.proto` alongside the stock
+proto, and `src/cache/rtCache.ts` loads all three into one root. `/arrivals` exposes `track`
+and `train_status`; `/alerts` exposes `alert_type`, `priority`,
+`human_readable_active_period` and `updated_at`.
+
+**NYCT is still dropped**, and cannot simply be added: it claims field 1001 on `FeedHeader`,
+which Mercury also claims, and protobufjs rejects the pair with `duplicate id 1001 in Type
+.transit_realtime.FeedHeader`. For the same reason the vendored Mercury copy has its
+`MercuryFeedHeader` extension removed — otherwise a subway feed's NYCT header bytes decode
+as a `MercuryFeedHeader`, since both are field 1001 with a `required string` at field 1.
+Adding NYCT means either per-feed-family roots or trimming its `FeedHeader` block too.
+
+What dropping NYCT costs: `is_assigned`, the only clean way to tell a real prediction from a
+schedule-derived one, and the `direction` enum, the only *documented* direction signal in the
+subway RT feed — though `src/services/realtime.service.ts` deliberately prefers the platform
+suffix over that enum, which is absent on 46% of updates and indistinguishable from `NORTH`
+when absent.
 
 ## Caching and cadence
 

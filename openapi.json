@@ -411,6 +411,18 @@
             "description": "LIRR/MNR train number",
             "example": "2306"
           },
+          "track": {
+            "type": "string",
+            "nullable": true,
+            "description": "Assigned track at this stop. LIRR/MNR only - always null on subway, where the platform is the stop.",
+            "example": "17"
+          },
+          "train_status": {
+            "type": "string",
+            "nullable": true,
+            "description": "Railroad-published trip state, passed through verbatim: On-Time, Late, Delayed, Departed, Arriving, Arrived, Canceled, Bus. Metro-North only in practice, and the only cancellation signal on that feed - cancelled trips are still returned.",
+            "example": "On-Time"
+          },
           "status": {
             "type": "string",
             "nullable": true,
@@ -446,6 +458,8 @@
           "direction_id",
           "direction_source",
           "train_number",
+          "track",
+          "train_status",
           "status",
           "source"
         ]
@@ -585,6 +599,29 @@
             "items": {
               "$ref": "#/components/schemas/ActivePeriod"
             }
+          },
+          "alert_type": {
+            "type": "string",
+            "nullable": true,
+            "description": "What kind of alert this is, in the MTA's own vocabulary. The only such signal - the MTA never populates the standard GTFS-RT cause/effect.",
+            "example": "Planned - Substitute Buses"
+          },
+          "priority": {
+            "type": "number",
+            "nullable": true,
+            "description": "Severity rank, 1 (lowest) to 35 (highest, = Suspended), over the MTA's shared status list. The highest rank across this alert's informed entities; sort descending for the worst disruptions first.",
+            "example": 26
+          },
+          "human_readable_active_period": {
+            "type": "string",
+            "nullable": true,
+            "description": "Prose summary of all active periods.",
+            "example": "Aug 22 - 24, Sat 1:15 AM to Mon 4:00 AM"
+          },
+          "updated_at": {
+            "type": "number",
+            "nullable": true,
+            "description": "Unix timestamp of the last change to this alert"
           }
         },
         "required": [
@@ -592,7 +629,11 @@
           "informed_entities",
           "header",
           "description",
-          "active_periods"
+          "active_periods",
+          "alert_type",
+          "priority",
+          "human_readable_active_period",
+          "updated_at"
         ]
       },
       "InformedEntity": {
