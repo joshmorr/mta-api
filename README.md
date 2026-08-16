@@ -234,6 +234,8 @@ GET /arrivals?stop=1&feed=lirr
       "direction_id": 0,
       "direction_source": "rt_direction_id",
       "train_number": "2306",
+      "track": "3",
+      "train_status": null,
       "status": "IN_TRANSIT_TO",
       "source": "realtime"
     }
@@ -246,6 +248,10 @@ GET /arrivals?stop=1&feed=lirr
 `destination`/`destination_stop_id` is the trip's true terminus — the last stop time update in the feed, not a static `trip_headsign` — resolved with zero truncation across all three feeds. For a subway platform ID this resolves to the parent station's name, not the platform.
 
 Direction is feed-honest, not uniform, because the three systems don't publish the same signal: subway `direction` (`NORTH`/`SOUTH`, `direction_source: "stop_suffix"`) comes from the matched platform's `N`/`S` suffix and has 100% coverage; LIRR `direction_id` (`0`/`1`, `direction_source: "rt_direction_id"`) is branch-relative as published by the railroad, not a compass direction — `direction_id=1` on a train headed to Penn Station means inbound, not south; Metro-North publishes neither, because its direction *is* `destination`. Any field the feed doesn't publish for a given trip is `null`, including `status`, `delay_seconds`, and `train_number` (LIRR/MNR only).
+
+`track` and `train_status` come from the MTA's railroad extension to GTFS-RT and are LIRR/MNR only — both are always `null` on subway, where the platform *is* the stop. `track` is the assigned track at this stop. `train_status` is the railroad's own trip state, passed through verbatim: `On-Time`, `Late`, `Delayed`, `Departed`, `Arriving`, `Arrived`, `Canceled`, `Bus`. In practice only Metro-North populates it; LIRR sends the field empty, which this API normalizes to `null`.
+
+**`train_status` is the only cancellation signal Metro-North publishes** — it never sets the GTFS-RT `schedule_relationship=CANCELED`. Cancelled trains are still returned in `arrivals` rather than filtered out, so a client that cares must check the field: `arrivals.filter(a => a.train_status !== 'Canceled')`.
 
 When the upstream RT fetch fails but a cached feed is available, the response is served with `stale: true` and `feed_error` describing the reason.
 
@@ -503,13 +509,23 @@ GET /alerts?stop_id=711&direction=S
       "description": "Trains run via F line...",
       "active_periods": [
         { "start": 1773605400, "end": 1773691800 }
-      ]
+      ],
+      "alert_type": "Planned - Reroute",
+      "priority": 18,
+      "human_readable_active_period": "Aug 22 - 24, Sat 1:15 AM to Mon 4:00 AM",
+      "updated_at": 1773605100
     }
   ]
 }
 ```
 
 Each `informed_entity` entry is an independent selector — fields within one entry are ANDed together, entries across an alert are ORed. A missing `direction_id` means both directions are affected at that stop. `agency_id` and `direction_id` are only present when the MTA included them in the feed; not all alerts carry station-level detail.
+
+`alert_type`, `priority`, `human_readable_active_period`, and `updated_at` come from the MTA's Mercury extension to GTFS-RT. They matter more than they might look: **the MTA never populates the standard GTFS-RT `cause` and `effect` fields**, so `alert_type` is the only machine-readable statement of what kind of disruption this is — `Delays`, `Cancellations`, `Detour`, `Station Notice`, `Planned - Substitute Buses`, and so on.
+
+`priority` ranks severity from 1 (lowest) to 35 (`Suspended`) on the MTA's shared status list, so `alerts.sort((a, b) => b.priority - a.priority)` puts the worst disruption first. The upstream feed carries this per affected route/stop; this API reports the highest rank across an alert's informed entities.
+
+`human_readable_active_period` is the MTA's own prose summary of `active_periods`, worth preferring over rendering the raw timestamps. Any of the four is `null` on an alert that doesn't carry the extension.
 
 
 ---

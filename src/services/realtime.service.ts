@@ -11,7 +11,7 @@ import {
 import { findRoutesById, getRoutesByIds } from '../db/queries/routes';
 import { toRouteNames } from './routes.service';
 import { findStopsById, getParentId, getStopNamesByIds } from '../db/queries/stops';
-import { toNumber } from '../utils/realtime';
+import { nonEmpty, railroadStopTime, toNumber } from '../utils/realtime';
 import { getRelevantServiceDates } from '../utils/serviceDate';
 
 // VehicleStopStatus is a proto enum; protobufjs decodes it as an int.
@@ -177,6 +177,13 @@ export async function getArrivalsForStop(
         const departureTime = stu.departure ? toNumber(stu.departure.time) : null;
         const delaySeconds = presenceDelay(stu.arrival) ?? presenceDelay(stu.departure);
 
+        // MTA Railroad extension, LIRR/MNR only. Both are proto2 optional
+        // strings that the railroads publish as '' when they have nothing, so
+        // nonEmpty is the presence test rather than hasOwnProperty.
+        const railroad = railroadStopTime(stu);
+        const track = nonEmpty(railroad?.track);
+        const trainStatus = nonEmpty(railroad?.trainStatus);
+
         // Subway direction is the matched platform suffix, full stop - free,
         // 100% coverage, no proto2-default ambiguity. Deliberately not the
         // NYCT direction enum (absent on 46% of updates and indistinguishable
@@ -200,6 +207,8 @@ export async function getArrivalsForStop(
           direction_id: directionId,
           direction_source: directionSource,
           train_number: trainNumber,
+          track,
+          train_status: trainStatus,
           status,
           source: 'realtime',
         });

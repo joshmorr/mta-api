@@ -1,9 +1,7 @@
 import { describe, expect, it, mock, afterEach, afterAll } from 'bun:test';
-import * as protobuf from 'protobufjs';
-import { join } from 'path';
 import { getFeed, __resetRtCacheForTests } from '../../src/cache/rtCache';
 import { config } from '../../src/config';
-import type { FeedMessage } from '../../src/types/gtfs';
+import { encodeFeedMessage } from '../helpers/rt';
 
 const realFetch = globalThis.fetch;
 const realDateNow = Date.now;
@@ -16,24 +14,13 @@ afterAll(() => {
   Date.now = realDateNow;
 });
 
-async function encodeFeedMessage(): Promise<ArrayBuffer> {
-  const root = await protobuf.load(join(import.meta.dir, '../../src/proto/gtfs-realtime.proto'));
-  const Type = root.lookupType('transit_realtime.FeedMessage');
-  const u8 = Type.encode(
-    Type.create({
-      header: { gtfsRealtimeVersion: '2.0', timestamp: 1_700_000_000 },
-      entity: [],
-    } as Partial<FeedMessage>),
-  ).finish();
-  const buf = new ArrayBuffer(u8.byteLength);
-  new Uint8Array(buf).set(u8);
-  return buf;
-}
+/** Header timestamp matches the pinned clock below; nothing asserts on it. */
+const feedHeader = { gtfsRealtimeVersion: '2.0', timestamp: 1_700_000_000 };
 
 describe('rtCache edge cases', () => {
   it('still serves the cached entry at exactly TTL boundary', async () => {
     __resetRtCacheForTests();
-    const body = await encodeFeedMessage();
+    const body = await encodeFeedMessage({ header: feedHeader });
     const fetchMock = mock(async () => new Response(body, { status: 200 }));
     globalThis.fetch = fetchMock as unknown as typeof fetch;
 
@@ -59,7 +46,7 @@ describe('rtCache edge cases', () => {
   it('a failed pending fetch does not poison the next call (re-attempts)', async () => {
     __resetRtCacheForTests();
     let firstCall = true;
-    const body = await encodeFeedMessage();
+    const body = await encodeFeedMessage({ header: feedHeader });
     const fetchMock = mock(async () => {
       if (firstCall) {
         firstCall = false;
@@ -74,5 +61,53 @@ describe('rtCache edge cases', () => {
     const second = await getFeed('edge/poison');
     expect(second.stale).toBe(false);
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('vendor extension decoding', () => {
+  // The Mercury proto is vendored WITHOUT its FeedHeader extension. NYCT claims
+  // the same field number (1001) on FeedHeader, so had we kept Mercury's, a
+  // subway feed header would decode its NYCT bytes as a MercuryFeedHeader and
+  // report a field that isn't there. Everything shares one protobufjs root, so
+  // this is the check that the trim held.
+  it('decodes a subway-style feed header without inventing an extension field', async () => {
+    __resetRtCacheForTests();
+    const body = await encodeFeedMessage({ header: feedHeader });
+    globalThis.fetch = mock(async () => new Response(body, { status: 200 })) as unknown as typeof fetch;
+    Date.now = () => 1_700_000_000_000;
+
+    const { feedMessage } = await getFeed('edge/subway-header');
+    expect(Object.keys(feedMessage.header)).toEqual(['gtfsRealtimeVersion', 'timestamp']);
+  });
+
+  it('round-trips the railroad stop time extension', async () => {
+    __resetRtCacheForTests();
+    const body = await encodeFeedMessage({
+      header: feedHeader,
+      entity: [
+        {
+          id: 'r',
+          tripUpdate: {
+            trip: { tripId: 'L1', routeId: 'PW' },
+            stopTimeUpdate: [
+              {
+                stopId: '237',
+                arrival: { time: 1_700_000_100 },
+                '.transit_realtime.mtaRailroadStopTimeUpdate': { track: '17', trainStatus: 'Late' },
+              },
+            ],
+          },
+        },
+      ],
+    });
+    globalThis.fetch = mock(async () => new Response(body, { status: 200 })) as unknown as typeof fetch;
+    Date.now = () => 1_700_000_000_000;
+
+    const { feedMessage } = await getFeed('edge/railroad-ext');
+    const stu = feedMessage.entity[0].tripUpdate!.stopTimeUpdate[0];
+    expect(stu['.transit_realtime.mtaRailroadStopTimeUpdate']).toEqual({
+      track: '17',
+      trainStatus: 'Late',
+    });
   });
 });

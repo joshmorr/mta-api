@@ -120,6 +120,25 @@ export interface StopTimeUpdate {
   stopSequence?: number;
   arrival?: StopTimeEvent;
   departure?: StopTimeEvent;
+  /** LIRR/MNR only. Read it via `railroadStopTime()` in utils/realtime. */
+  '.transit_realtime.mtaRailroadStopTimeUpdate'?: MtaRailroadStopTimeUpdate;
+}
+
+/**
+ * MTA Railroad extension (field 1005), LIRR and MNR only.
+ *
+ * Both fields are `optional string`, so the proto2 default is `''` rather than
+ * absent - LIRR in particular publishes empty strings rather than omitting the
+ * field. Use `nonEmpty()` rather than a presence check.
+ */
+export interface MtaRailroadStopTimeUpdate {
+  track?: string;
+  /**
+   * MNR only in practice. Observed: On-Time, Late, Delayed, Departed,
+   * Arriving, Arrived, Canceled, Bus. MNR does not set
+   * `schedule_relationship=CANCELED`, so this is the only cancellation signal.
+   */
+  trainStatus?: string;
 }
 
 export interface StopTimeEvent {
@@ -147,6 +166,30 @@ export interface Alert {
   informedEntity: EntitySelector[];
   headerText?: TranslatedString;
   descriptionText?: TranslatedString;
+  /** Read it via `mercuryAlert()` in utils/realtime. */
+  '.transit_realtime.mercuryAlert'?: MercuryAlert;
+}
+
+/**
+ * Mercury extension (field 1001) on the camsys alert feed. Only the fields
+ * this API consumes are mirrored; the feed also carries station alternatives,
+ * work-order numbers and screen text.
+ *
+ * This is where the alert's kind actually lives - the MTA never populates the
+ * standard `cause`/`effect`.
+ */
+export interface MercuryAlert {
+  createdAt?: number | Long;
+  updatedAt?: number | Long;
+  alertType?: string;
+  /** Absent on a minority of alerts, and decodes as null rather than missing. */
+  humanReadableActivePeriod?: TranslatedString | null;
+}
+
+/** Mercury extension (field 1001) on each informed entity. */
+export interface MercuryEntitySelector {
+  /** `GTFS-ID:Priority`, e.g. `MTASBWY:F:26`. The GTFS ID contains colons. */
+  sortOrder?: string;
 }
 
 export interface TimeRange {
@@ -159,6 +202,8 @@ export interface EntitySelector {
   routeId?: string;
   stopId?: string;
   directionId?: number;
+  /** Read it via `mercurySortOrder()` in utils/realtime. */
+  '.transit_realtime.mercuryEntitySelector'?: MercuryEntitySelector;
 }
 
 export interface TranslatedString {

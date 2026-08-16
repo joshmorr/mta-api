@@ -68,6 +68,19 @@ export interface Arrival {
   direction_source: 'stop_suffix' | 'rt_direction_id' | null;
   /** LIRR/MNR train number, from the vehicle descriptor label. */
   train_number: string | null;
+  /**
+   * Assigned track at this stop, from the MTA Railroad feed extension.
+   * LIRR/MNR only; always null on subway, where the platform is the stop.
+   */
+  track: string | null;
+  /**
+   * Railroad-published trip state - `On-Time`, `Late`, `Delayed`, `Departed`,
+   * `Arriving`, `Arrived`, `Canceled`, `Bus`. Metro-North only in practice
+   * (LIRR sends the field empty), and the sole cancellation signal on that
+   * feed, which never sets schedule_relationship=CANCELED. Passed through
+   * verbatim rather than normalized; cancelled trips are still returned.
+   */
+  train_status: string | null;
   /** `null` when the feed doesn't publish a vehicle status for this trip. */
   status: VehicleStopStatus | null;
   source: 'realtime';
@@ -117,6 +130,22 @@ export interface AlertResponse {
   header: string;
   description: string;
   active_periods: ActivePeriod[];
+  /**
+   * What kind of alert this is, in the MTA's own vocabulary - e.g. `Delays`,
+   * `Planned - Substitute Buses`, `Station Notice`. This is the only such
+   * signal: the MTA never populates the standard GTFS-RT cause/effect.
+   */
+  alert_type: string | null;
+  /**
+   * Severity rank, 1 (lowest) to 35 (highest, = Suspended), over the MTA's
+   * shared status list. The highest rank across this alert's informed
+   * entities. Sort descending to surface the worst disruptions first.
+   */
+  priority: number | null;
+  /** Prose summary of all active periods, e.g. "Sundays in May from 10:45pm to midnight". */
+  human_readable_active_period: string | null;
+  /** Unix timestamp of the last change to this alert. */
+  updated_at: number | null;
 }
 
 export interface ErrorResponse {

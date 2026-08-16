@@ -98,6 +98,28 @@ describe('tools/list', () => {
     expect(Object.keys(vehicles.properties)).toContain('route_name');
     expect(vehicles.required).toContain('route_name');
   });
+
+  it('advertises the railroad extension fields on the arrivals output schema', async () => {
+    const byName = new Map((await mcp.listTools()).map((t) => [t.name, t]));
+    const arrivalItem = (byName.get('mta_get_arrivals')?.outputSchema as Record<string, any>)
+      .properties.arrivals.items;
+
+    for (const field of ['track', 'train_status']) {
+      expect(Object.keys(arrivalItem.properties)).toContain(field);
+      expect(arrivalItem.required).toContain(field);
+    }
+  });
+
+  it('advertises the Mercury fields on the alerts output schema', async () => {
+    const byName = new Map((await mcp.listTools()).map((t) => [t.name, t]));
+    const alertItem = (byName.get('mta_get_alerts')?.outputSchema as Record<string, any>)
+      .properties.alerts.items;
+
+    for (const field of ['alert_type', 'priority', 'human_readable_active_period', 'updated_at']) {
+      expect(Object.keys(alertItem.properties)).toContain(field);
+      expect(alertItem.required).toContain(field);
+    }
+  });
 });
 
 describe('mta_search_stops', () => {

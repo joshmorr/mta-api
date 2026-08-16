@@ -1,28 +1,6 @@
 import { describe, expect, it, mock, afterEach, afterAll } from 'bun:test';
-import * as protobuf from 'protobufjs';
-import { join } from 'path';
-import type { FeedMessage } from '../../src/types/gtfs';
 import { fetchAlerts, getAlerts, parseDirection } from '../../src/services/alerts.service';
-
-// Stub globalThis.fetch with a real protobuf payload so the alerts service runs
-// against the real cache module. (Mocking '../../src/cache/rtCache' via mock.module
-// would persist across the whole test process and break sibling cache tests.)
-async function encodeFeedMessage(payload: Partial<FeedMessage>): Promise<ArrayBuffer> {
-  const root = await protobuf.load(
-    join(import.meta.dir, '../../src/proto/gtfs-realtime.proto'),
-  );
-  const Type = root.lookupType('transit_realtime.FeedMessage');
-  const u8 = Type.encode(
-    Type.create({
-      header: { gtfsRealtimeVersion: '2.0', timestamp: 0 },
-      entity: [],
-      ...payload,
-    }),
-  ).finish();
-  const buf = new ArrayBuffer(u8.byteLength);
-  new Uint8Array(buf).set(u8);
-  return buf;
-}
+import { encodeFeedMessage } from '../helpers/rt';
 
 const realFetch = globalThis.fetch;
 const realDateNow = Date.now;
@@ -279,5 +257,110 @@ describe('getAlerts', () => {
     await stubAlertFeed();
     const { alerts } = await getAlerts({ routes: ['NOPE'] });
     expect(alerts).toEqual([]);
+  });
+});
+
+describe('Mercury alert extension', () => {
+  it('surfaces alert_type, priority, prose active period and updated_at', async () => {
+    const body = await encodeFeedMessage({
+      header: { gtfsRealtimeVersion: '2.0', timestamp: 1_700_000_100 },
+      entity: [
+        {
+          id: 'lmm:planned_work:1',
+          alert: {
+            activePeriod: [{ start: 100, end: 200 }],
+            informedEntity: [
+              {
+                routeId: 'F',
+                '.transit_realtime.mercuryEntitySelector': { sortOrder: 'MTASBWY:F:19' },
+              },
+            ],
+            headerText: { translation: [{ text: 'Buses replace trains', language: 'en' }] },
+            descriptionText: { translation: [{ text: 'Planned work', language: 'en' }] },
+            '.transit_realtime.mercuryAlert': {
+              createdAt: 1_700_000_000,
+              updatedAt: 1_700_000_050,
+              alertType: 'Planned - Substitute Buses',
+              humanReadableActivePeriod: {
+                translation: [{ text: 'Aug 22 - 24, Sat 1:15 AM to Mon 4:00 AM', language: 'en' }],
+              },
+            },
+          },
+        },
+      ],
+    });
+    stubFetch(body);
+    advanceClock();
+
+    const result = await fetchAlerts();
+    expect(result.alerts).toHaveLength(1);
+    const a = result.alerts[0];
+    expect(a.alert_type).toBe('Planned - Substitute Buses');
+    expect(a.priority).toBe(19);
+    expect(a.human_readable_active_period).toBe('Aug 22 - 24, Sat 1:15 AM to Mon 4:00 AM');
+    expect(a.updated_at).toBe(1_700_000_050);
+  });
+
+  it('takes the highest priority across informed entities', async () => {
+    const body = await encodeFeedMessage({
+      header: { gtfsRealtimeVersion: '2.0', timestamp: 1_700_000_200 },
+      entity: [
+        {
+          id: 'lmm:alert:2:31',
+          alert: {
+            activePeriod: [{ start: 100, end: 200 }],
+            informedEntity: [
+              {
+                routeId: 'F',
+                '.transit_realtime.mercuryEntitySelector': { sortOrder: 'MTASBWY:F:12' },
+              },
+              {
+                routeId: 'G',
+                '.transit_realtime.mercuryEntitySelector': { sortOrder: 'MTASBWY:G:31' },
+              },
+              {
+                routeId: 'M',
+                '.transit_realtime.mercuryEntitySelector': { sortOrder: 'MTASBWY:M:26' },
+              },
+            ],
+            headerText: { translation: [{ text: 'Detour', language: 'en' }] },
+            '.transit_realtime.mercuryAlert': {
+              createdAt: 1,
+              updatedAt: 2,
+              alertType: 'Detour',
+            },
+          },
+        },
+      ],
+    });
+    stubFetch(body);
+    advanceClock();
+
+    const result = await fetchAlerts();
+    expect(result.alerts[0].priority).toBe(31);
+  });
+
+  it('nulls all four fields when an alert carries no Mercury extension', async () => {
+    const body = await encodeFeedMessage({
+      header: { gtfsRealtimeVersion: '2.0', timestamp: 1_700_000_300 },
+      entity: [
+        {
+          id: 'bare',
+          alert: {
+            activePeriod: [{ start: 100, end: 200 }],
+            informedEntity: [{ routeId: 'A' }],
+            headerText: { translation: [{ text: 'Something', language: 'en' }] },
+          },
+        },
+      ],
+    });
+    stubFetch(body);
+    advanceClock();
+
+    const a = (await fetchAlerts()).alerts[0];
+    expect(a.alert_type).toBeNull();
+    expect(a.priority).toBeNull();
+    expect(a.human_readable_active_period).toBeNull();
+    expect(a.updated_at).toBeNull();
   });
 });
