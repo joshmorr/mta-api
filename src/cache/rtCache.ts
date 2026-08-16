@@ -18,8 +18,17 @@ const pending = new Map<string, Promise<FeedMessage>>();
 function getFeedMessageType(): Promise<protobuf.Type> {
   if (FeedMessageType) return Promise.resolve(FeedMessageType);
   if (feedMessageTypePromise) return feedMessageTypePromise;
+  // The MTA's vendor extensions ride on the same FeedMessage, so all three
+  // load into one root. MTARR is field 1005 and Mercury 1001 on Alert /
+  // EntitySelector, which don't collide. The NYCT extensions are deliberately
+  // absent: they claim 1001 on FeedHeader, which Mercury also claims, and
+  // loading both throws "duplicate id 1001 in Type .transit_realtime.FeedHeader".
   feedMessageTypePromise = protobuf
-    .load(join(import.meta.dir, '../proto/gtfs-realtime.proto'))
+    .load([
+      join(import.meta.dir, '../proto/gtfs-realtime.proto'),
+      join(import.meta.dir, '../proto/gtfs-realtime-MTARR.proto'),
+      join(import.meta.dir, '../proto/gtfs-realtime-service-status.proto'),
+    ])
     .then((root) => {
       FeedMessageType = root.lookupType('transit_realtime.FeedMessage');
       return FeedMessageType;
