@@ -1,11 +1,9 @@
 import { describe, expect, it, beforeEach, mock, afterAll } from 'bun:test';
-import * as protobuf from 'protobufjs';
-import { join } from 'path';
 import { makeMcpClient, textOf } from '../helpers/mcp';
 import { resetDb, seedSubway } from '../helpers/seed';
+import { encodeFeedMessage } from '../helpers/rt';
 import { db } from '../../src/db/client';
 import { __resetRtCacheForTests } from '../../src/cache/rtCache';
-import type { FeedMessage } from '../../src/types/gtfs';
 
 const mcp = makeMcpClient();
 
@@ -34,17 +32,6 @@ function pinClock(): number {
   const fixedMs = Date.parse('2024-01-15T15:00:00.000Z');
   Date.now = () => fixedMs;
   return Math.floor(fixedMs / 1000);
-}
-
-async function encodeFeedMessage(payload: Partial<FeedMessage>): Promise<ArrayBuffer> {
-  const root = await protobuf.load(join(import.meta.dir, '../../src/proto/gtfs-realtime.proto'));
-  const Type = root.lookupType('transit_realtime.FeedMessage');
-  const u8 = Type.encode(
-    Type.create({ header: { gtfsRealtimeVersion: '2.0', timestamp: 0 }, entity: [], ...payload }),
-  ).finish();
-  const buf = new ArrayBuffer(u8.byteLength);
-  new Uint8Array(buf).set(u8);
-  return buf;
 }
 
 function stubFetchOk(body: ArrayBuffer): void {

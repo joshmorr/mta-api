@@ -1,14 +1,12 @@
 import { describe, expect, it, mock, beforeEach, afterEach, afterAll } from 'bun:test';
-import * as protobuf from 'protobufjs';
-import { join } from 'path';
 import { getNyDateParts, getRelevantServiceDates } from '../../src/utils/serviceDate';
 import {
   getArrivalsForStop,
   getVehiclesForRoute,
   NotFoundError,
 } from '../../src/services/realtime.service';
-import type { FeedMessage } from '../../src/types/gtfs';
 import { resetDb, seedSubway, seedLirr, seedMnr } from '../helpers/seed';
+import { encodeFeedMessage } from '../helpers/rt';
 import { db } from '../../src/db/client';
 
 // All dates chosen to have unambiguous NY equivalents:
@@ -106,21 +104,6 @@ function pinClockToMonday(): number {
   const fixedMs = Date.parse('2024-01-15T15:00:00.000Z') + testHourOffset * 60 * 60 * 1000;
   Date.now = () => fixedMs;
   return Math.floor(fixedMs / 1000);
-}
-
-async function encodeFeedMessage(payload: Partial<FeedMessage>): Promise<ArrayBuffer> {
-  const root = await protobuf.load(join(import.meta.dir, '../../src/proto/gtfs-realtime.proto'));
-  const Type = root.lookupType('transit_realtime.FeedMessage');
-  const u8 = Type.encode(
-    Type.create({
-      header: { gtfsRealtimeVersion: '2.0', timestamp: 0 },
-      entity: [],
-      ...payload,
-    }),
-  ).finish();
-  const buf = new ArrayBuffer(u8.byteLength);
-  new Uint8Array(buf).set(u8);
-  return buf;
 }
 
 function stubFetchWith(body: ArrayBuffer | (() => Response)): void {
@@ -805,5 +788,157 @@ describe('getVehiclesForRoute', () => {
     const result = await getVehiclesForRoute('1', 'subway');
     expect(result.vehicles[0].current_stop_id).toBe('');
     expect(result.vehicles[0].status).toBe('IN_TRANSIT_TO');
+  });
+});
+
+describe('track and train_status from the railroad extension', () => {
+  beforeEach(() => {
+    resetDb();
+  });
+
+  function seedLirrSchedule(): void {
+    seedLirr();
+    db.run(
+      `INSERT INTO trips (feed_id, trip_id, route_id, service_id, direction_id, shape_id)
+       VALUES ('lirr', 'L1', 'PW', 'DAILY', 0, NULL)`,
+    );
+    db.run(
+      `INSERT INTO stop_times (feed_id, trip_id, stop_id, arrival_time, departure_time, stop_sequence)
+       VALUES ('lirr', 'L1', '1', '10:00:00', '10:00:00', 1)`,
+    );
+    db.run(
+      `INSERT INTO calendar (feed_id, service_id, monday, tuesday, wednesday, thursday, friday, saturday, sunday, start_date, end_date)
+       VALUES ('lirr', 'DAILY', 1, 1, 1, 1, 1, 1, 1, '20200101', '20991231')`,
+    );
+  }
+
+  function seedMnrSchedule(): void {
+    seedMnr();
+    db.run(
+      `INSERT INTO trips (feed_id, trip_id, route_id, service_id, direction_id, shape_id)
+       VALUES ('mnr', 'M1', 'HUDSON', 'DAILY', 0, NULL)`,
+    );
+    db.run(
+      `INSERT INTO stop_times (feed_id, trip_id, stop_id, arrival_time, departure_time, stop_sequence)
+       VALUES ('mnr', 'M1', '1', '10:00:00', '10:00:00', 1)`,
+    );
+    db.run(
+      `INSERT INTO calendar (feed_id, service_id, monday, tuesday, wednesday, thursday, friday, saturday, sunday, start_date, end_date)
+       VALUES ('mnr', 'DAILY', 1, 1, 1, 1, 1, 1, 1, '20200101', '20991231')`,
+    );
+  }
+
+  it('surfaces track and train_status from an MNR stop time update', async () => {
+    seedMnrSchedule();
+    const now = pinClockToMonday();
+    stubFetchWith(await encodeFeedMessage({
+      header: { gtfsRealtimeVersion: '2.0', timestamp: now },
+      entity: [
+        {
+          id: 'm',
+          tripUpdate: {
+            trip: { tripId: 'M1', routeId: 'HUDSON' },
+            stopTimeUpdate: [
+              {
+                stopId: '1',
+                arrival: { time: now + 120 },
+                '.transit_realtime.mtaRailroadStopTimeUpdate': {
+                  track: '102A',
+                  trainStatus: 'On-Time',
+                },
+              },
+            ],
+          },
+        },
+      ],
+    }));
+
+    const result = await getArrivalsForStop('1', 10, 'mnr');
+    expect(result.arrivals).toHaveLength(1);
+    expect(result.arrivals[0].track).toBe('102A');
+    expect(result.arrivals[0].train_status).toBe('On-Time');
+  });
+
+  it('returns a cancelled MNR train rather than filtering it out', async () => {
+    // Metro-North never sets schedule_relationship=CANCELED - train_status is
+    // the only cancellation signal, so dropping the trip would hide it.
+    seedMnrSchedule();
+    const now = pinClockToMonday();
+    stubFetchWith(await encodeFeedMessage({
+      header: { gtfsRealtimeVersion: '2.0', timestamp: now },
+      entity: [
+        {
+          id: 'm',
+          tripUpdate: {
+            trip: { tripId: 'M1', routeId: 'HUDSON' },
+            stopTimeUpdate: [
+              {
+                stopId: '1',
+                arrival: { time: now + 120 },
+                '.transit_realtime.mtaRailroadStopTimeUpdate': {
+                  track: '4',
+                  trainStatus: 'Canceled',
+                },
+              },
+            ],
+          },
+        },
+      ],
+    }));
+
+    const result = await getArrivalsForStop('1', 10, 'mnr');
+    expect(result.arrivals).toHaveLength(1);
+    expect(result.arrivals[0].train_status).toBe('Canceled');
+  });
+
+  it('treats an empty trainStatus as null, the way LIRR publishes it', async () => {
+    // proto2 optional strings default to '', and LIRR sends the field empty
+    // rather than omitting it - so this must not surface as an empty string.
+    seedLirrSchedule();
+    const now = pinClockToMonday();
+    stubFetchWith(await encodeFeedMessage({
+      header: { gtfsRealtimeVersion: '2.0', timestamp: now },
+      entity: [
+        {
+          id: 'l',
+          tripUpdate: {
+            trip: { tripId: 'L1', routeId: 'PW' },
+            stopTimeUpdate: [
+              {
+                stopId: '1',
+                arrival: { time: now + 120 },
+                '.transit_realtime.mtaRailroadStopTimeUpdate': { track: '17', trainStatus: '' },
+              },
+            ],
+          },
+        },
+      ],
+    }));
+
+    const result = await getArrivalsForStop('1', 10, 'lirr');
+    expect(result.arrivals[0].track).toBe('17');
+    expect(result.arrivals[0].train_status).toBeNull();
+  });
+
+  it('leaves both null on a subway feed, which carries no railroad extension', async () => {
+    seedSubway();
+    db.run(`UPDATE calendar SET saturday = 1, sunday = 1 WHERE service_id = 'WKDY'`);
+    const now = pinClockToMonday();
+    stubFetchWith(await encodeFeedMessage({
+      header: { gtfsRealtimeVersion: '2.0', timestamp: now },
+      entity: [
+        {
+          id: 's',
+          tripUpdate: {
+            trip: { tripId: 'T1', routeId: '1' },
+            stopTimeUpdate: [{ stopId: '127N', arrival: { time: now + 60 } }],
+          },
+        },
+      ],
+    }));
+
+    const result = await getArrivalsForStop('127', 10, 'subway');
+    expect(result.arrivals[0].track).toBeNull();
+    expect(result.arrivals[0].train_status).toBeNull();
   });
 });
