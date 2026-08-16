@@ -68,6 +68,19 @@ export interface Arrival {
   direction_source: 'stop_suffix' | 'rt_direction_id' | null;
   /** LIRR/MNR train number, from the vehicle descriptor label. */
   train_number: string | null;
+  /**
+   * Assigned track at this stop, from the MTA Railroad feed extension.
+   * LIRR/MNR only; always null on subway, where the platform is the stop.
+   */
+  track: string | null;
+  /**
+   * Railroad-published trip state - `On-Time`, `Late`, `Delayed`, `Departed`,
+   * `Arriving`, `Arrived`, `Canceled`, `Bus`. Metro-North only in practice
+   * (LIRR sends the field empty), and the sole cancellation signal on that
+   * feed, which never sets schedule_relationship=CANCELED. Passed through
+   * verbatim rather than normalized; cancelled trips are still returned.
+   */
+  train_status: string | null;
   /** `null` when the feed doesn't publish a vehicle status for this trip. */
   status: VehicleStopStatus | null;
   source: 'realtime';

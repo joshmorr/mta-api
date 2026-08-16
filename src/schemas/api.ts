@@ -130,6 +130,15 @@ export const ArrivalSchema = z.object({
     .openapi({ description: 'Branch-relative direction as published by LIRR - not a compass direction. LIRR only.' }),
   direction_source: z.enum(['stop_suffix', 'rt_direction_id']).nullable(),
   train_number: z.string().nullable().openapi({ description: 'LIRR/MNR train number', example: '2306' }),
+  track: z.string().nullable().openapi({
+    description: 'Assigned track at this stop. LIRR/MNR only - always null on subway, where the platform is the stop.',
+    example: '17',
+  }),
+  train_status: z.string().nullable().openapi({
+    description:
+      'Railroad-published trip state, passed through verbatim: On-Time, Late, Delayed, Departed, Arriving, Arrived, Canceled, Bus. Metro-North only in practice, and the only cancellation signal on that feed - cancelled trips are still returned.',
+    example: 'On-Time',
+  }),
   status: z.enum(['INCOMING_AT', 'STOPPED_AT', 'IN_TRANSIT_TO']).nullable()
     .openapi({ description: 'Vehicle status, or null if this feed doesn\'t publish it for this trip' }),
   source: z.literal('realtime'),
