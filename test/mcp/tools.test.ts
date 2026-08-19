@@ -1,6 +1,6 @@
 import { describe, expect, it, beforeEach, afterAll } from 'bun:test';
 import { makeMcpClient, textOf } from '../helpers/mcp';
-import { resetDb, seedSubway, seedLirr, seedMnr, seedLirrSchedule, seedSubwaySchedule } from '../helpers/seed';
+import { resetDb, seedSubway, seedLirr, seedMnr, seedLirrSchedule, seedSubwaySchedule, seedLirrTransferSchedule } from '../helpers/seed';
 import { db } from '../../src/db/client';
 
 const mcp = makeMcpClient();
@@ -363,6 +363,57 @@ describe('mta_get_schedule', () => {
       route: 'bogus',
     });
     expect(result.isError).toBe(true);
+  });
+
+  it('accepts max_transfers as a number and echoes what it searched', async () => {
+    const result = await mcp.callTool('mta_get_schedule', {
+      from: '44',
+      to: '237',
+      feed: 'lirr',
+      date: '20240115',
+      max_transfers: 0,
+    });
+    expect(result.isError).toBeFalsy();
+    expect((result.structuredContent as { max_transfers: number }).max_transfers).toBe(0);
+  });
+
+  it('rejects max_transfers as a string - MCP delivers typed arguments', async () => {
+    const result = await mcp.callTool('mta_get_schedule', {
+      from: '44',
+      to: '237',
+      feed: 'lirr',
+      max_transfers: '1',
+    });
+    expect(result.isError).toBe(true);
+  });
+
+  it('rejects a transfer count no feed supports', async () => {
+    const result = await mcp.callTool('mta_get_schedule', {
+      from: '44',
+      to: '237',
+      feed: 'lirr',
+      max_transfers: 2,
+    });
+    expect(result.isError).toBe(true);
+  });
+
+  it('returns a journey with one transfer, legs and all', async () => {
+    resetDb();
+    seedLirrTransferSchedule();
+
+    const result = await mcp.callTool('mta_get_schedule', {
+      from: '171',
+      to: '27',
+      feed: 'lirr',
+      date: '20240115',
+    });
+    expect(result.isError).toBeFalsy();
+    const body = result.structuredContent as {
+      departures: Array<{ transfers: number; legs: Array<{ transfer: { stop_name: string } | null }> }>;
+    };
+    expect(body.departures).toHaveLength(1);
+    expect(body.departures[0].transfers).toBe(1);
+    expect(body.departures[0].legs[1].transfer!.stop_name).toBe('Woodside');
   });
 });
 

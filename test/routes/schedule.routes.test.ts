@@ -1,7 +1,7 @@
 import { describe, expect, it, beforeEach } from 'bun:test';
 import { scheduleRouter } from '../../src/routes/schedule.routes';
 import { makeTestApp } from '../helpers/app';
-import { resetDb, seedLirrSchedule, seedSubwaySchedule } from '../helpers/seed';
+import { resetDb, seedLirrSchedule, seedSubwaySchedule, seedLirrTransferSchedule } from '../helpers/seed';
 
 const app = makeTestApp(scheduleRouter, '/schedule');
 
@@ -99,5 +99,47 @@ describe('GET /schedule', () => {
     const body = (await res.json()) as { from_stop_id: string; to_stop_id: string };
     expect(body.from_stop_id).toBe('101');
     expect(body.to_stop_id).toBe('127');
+  });
+  it('rejects a transfer count no feed supports', async () => {
+    const res = await app.request('/schedule?from=44&feed=lirr&to=237&max_transfers=2');
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: string; code: string };
+    expect(body.code).toBe('INVALID_PARAM');
+    expect(body.error).toMatch(/multi-transfer journeys are not supported yet/);
+  });
+
+  it('echoes the transfer cap it actually searched', async () => {
+    seedLirrSchedule();
+    const res = await app.request('/schedule?from=44&feed=lirr&to=237&date=20240115');
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as { max_transfers: number }).max_transfers).toBe(1);
+  });
+
+  it('clamps the transfer cap down to what the feed supports', async () => {
+    seedSubwaySchedule();
+    const res = await app.request('/schedule?from=101N&to=127N&feed=subway&date=20240115&max_transfers=1');
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as { max_transfers: number }).max_transfers).toBe(0);
+  });
+
+  it('returns a LIRR journey with one transfer end to end', async () => {
+    seedLirrTransferSchedule();
+    const res = await app.request('/schedule?from=171&feed=lirr&to=27&date=20240115');
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      max_transfers: number;
+      departures: Array<{
+        transfers: number;
+        legs: Array<{ trip_id: string; transfer: { stop_name: string; connection_seconds: number } | null }>;
+      }>;
+    };
+    expect(body.max_transfers).toBe(1);
+    expect(body.departures).toHaveLength(1);
+
+    const [journey] = body.departures;
+    expect(journey.transfers).toBe(1);
+    expect(journey.legs).toHaveLength(2);
+    expect(journey.legs[0].transfer).toBeNull();
+    expect(journey.legs[1].transfer!.stop_name).toBe('Woodside');
   });
 });

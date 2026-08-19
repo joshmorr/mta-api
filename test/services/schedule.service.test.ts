@@ -8,6 +8,8 @@ import {
   seedSubwaySchedule,
   seedLirrSchedule,
   seedMnrSchedule,
+  seedLirrTransferSchedule,
+  seedTransfersXfer,
 } from '../helpers/seed';
 
 // Monday, 2024-01-15, 10:00 NY (EST, UTC-5) - matches the fixtures'
@@ -344,5 +346,220 @@ describe('services/schedule.service', () => {
       );
       expect(() => getTripSchedule({ tripId: 'ORPHAN', feedId: 'subway' }, NOW)).toThrow(NotFoundError);
     });
+  });
+});
+
+describe('services/schedule.service - transfer journeys', () => {
+  beforeEach(() => {
+    resetDb();
+    seedLirrTransferSchedule();
+  });
+
+  const pair = { fromStopId: '171', feedId: 'lirr' as const, toStopId: '27', date: '20240115', limit: 20 };
+
+  it('answers a station pair that has no through train', () => {
+    const result = getSchedule(pair, NOW);
+
+    expect(result.max_transfers).toBe(1);
+    expect(result.departures).toHaveLength(1);
+
+    const [journey] = result.departures;
+    expect(journey.transfers).toBe(1);
+    expect(journey.legs).toHaveLength(2);
+    expect(journey.legs.map((l) => l.trip_id)).toEqual(['XFER-A', 'XFER-D']);
+  });
+
+  it('describes the first leg\'s boarding in the fields beside `legs`', () => {
+    const [journey] = getSchedule(pair, NOW).departures;
+
+    expect(journey.trip_id).toBe('XFER-A');
+    expect(journey.stop_id).toBe('171');
+    expect(journey.departure_time).toBe('10:00:00');
+    expect(journey.train_number).toBe('300');
+    expect(journey.legs[0].origin.stop_id).toBe(journey.stop_id);
+    expect(journey.legs[0].origin.departure_timestamp).toBe(journey.departure_timestamp);
+    expect(journey.legs[0].trip_id).toBe(journey.trip_id);
+  });
+
+  it('measures `destination` and duration_seconds across the whole journey', () => {
+    const [journey] = getSchedule(pair, NOW).departures;
+
+    // 10:00 out of Port Washington, 11:10 into Babylon.
+    expect(journey.destination.stop_id).toBe('27');
+    expect(journey.destination.arrival_time).toBe('11:10:00');
+    expect(journey.destination.duration_seconds).toBe(70 * 60);
+    expect(journey.destination.arrival_timestamp).toBe(journey.legs[1].destination.arrival_timestamp);
+  });
+
+  it('describes the interchange on the leg being transferred onto', () => {
+    seedTransfersXfer();
+
+    const [journey] = getSchedule(pair, NOW).departures;
+
+    expect(journey.legs[0].transfer).toBeNull();
+    const transfer = journey.legs[1].transfer!;
+    expect(transfer.stop_id).toBe('214');
+    expect(transfer.stop_name).toBe('Woodside');
+    expect(transfer.connection_seconds).toBe(15 * 60);
+    expect(transfer.min_transfer_time).toBe(600);
+    expect(transfer.guaranteed).toBe(true);
+    expect(transfer.departure_timestamp - transfer.arrival_timestamp).toBe(transfer.connection_seconds);
+    expect(transfer.arrival_timestamp).toBe(journey.legs[0].destination.arrival_timestamp!);
+    expect(transfer.departure_timestamp).toBe(journey.legs[1].origin.departure_timestamp!);
+  });
+
+  it('times each leg independently of the wait between them', () => {
+    seedTransfersXfer();
+
+    const [journey] = getSchedule(pair, NOW).departures;
+
+    expect(journey.legs[0].duration_seconds).toBe(30 * 60); // 10:00 -> 10:30
+    expect(journey.legs[1].duration_seconds).toBe(45 * 60); // 10:45 -> 11:30
+    expect(journey.legs[0].route_long_name).toBe('Port Washington Branch');
+    expect(journey.legs[1].route_long_name).toBe('Babylon Branch');
+    expect(journey.legs.map((l) => l.leg_index)).toEqual([0, 1]);
+  });
+
+  it('never routes a transfer through a city terminal', () => {
+    const result = getSchedule(pair, NOW);
+
+    expect(
+      result.departures.every((d) => d.legs.every((l) => l.transfer?.stop_id !== '237')),
+    ).toBe(true);
+  });
+
+  it('returns direct trips only when max_transfers is 0', () => {
+    const result = getSchedule({ ...pair, maxTransfers: 0 }, NOW);
+
+    expect(result.max_transfers).toBe(0);
+    expect(result.departures).toEqual([]);
+  });
+
+  it('clamps a request down to what the feed supports', () => {
+    resetDb();
+    seedSubwaySchedule();
+    seedOnwardTo142();
+
+    const result = getSchedule(
+      { fromStopId: '127', feedId: 'subway', toStopId: '142', limit: 5, maxTransfers: 1 },
+      NOW,
+    );
+
+    expect(result.max_transfers).toBe(0);
+    expect(result.departures.every((d) => d.transfers === 0)).toBe(true);
+  });
+
+  it('gives a direct trip one leg mirroring the fields beside it', () => {
+    resetDb();
+    seedLirrSchedule();
+
+    const [departure] = getSchedule(
+      { fromStopId: '44', feedId: 'lirr', toStopId: '237', date: '20240115', limit: 5 },
+      NOW,
+    ).departures;
+
+    expect(departure.transfers).toBe(0);
+    expect(departure.legs).toHaveLength(1);
+    expect(departure.legs[0].transfer).toBeNull();
+    expect(departure.legs[0].origin.stop_id).toBe('44');
+    expect(departure.legs[0].destination.stop_id).toBe('237');
+    expect(departure.legs[0].destination.arrival_timestamp).toBe(departure.destination.arrival_timestamp);
+    expect(departure.legs[0].trip_id).toBe(departure.trip_id);
+  });
+
+  it('drops a transfer journey a direct trip already beats', () => {
+    // A through train leaving Port Washington at 10:05 and reaching Babylon at
+    // 11:05 leaves later and arrives sooner than the 10:00 connection, so the
+    // connection is not worth offering.
+    db.run(
+      `INSERT INTO trips (feed_id, trip_id, route_id, service_id, direction_id, trip_headsign, trip_short_name, peak_offpeak)
+       VALUES ('lirr', 'XFER-THRU', 'BABY', 'XSVC', 0, 'Babylon', '700', 0)`,
+    );
+    db.run(
+      `INSERT INTO stop_times
+         (feed_id, trip_id, stop_id, arrival_time, departure_time, stop_sequence, arrival_seconds, departure_seconds)
+       VALUES
+         ('lirr', 'XFER-THRU', '171', '10:05:00', '10:05:00', 1, ${10 * 3600 + 5 * 60}, ${10 * 3600 + 5 * 60}),
+         ('lirr', 'XFER-THRU', '27',  '11:05:00', '11:05:00', 2, ${11 * 3600 + 5 * 60}, ${11 * 3600 + 5 * 60})`,
+    );
+
+    const result = getSchedule(pair, NOW);
+
+    expect(result.departures).toHaveLength(1);
+    expect(result.departures[0].trip_id).toBe('XFER-THRU');
+    expect(result.departures[0].transfers).toBe(0);
+  });
+
+  it('keeps a transfer journey that beats the through trains', () => {
+    // Same through train, but now a slow one: it arrives after the connection.
+    db.run(
+      `INSERT INTO trips (feed_id, trip_id, route_id, service_id, direction_id, trip_headsign, trip_short_name, peak_offpeak)
+       VALUES ('lirr', 'XFER-SLOW', 'BABY', 'XSVC', 0, 'Babylon', '800', 0)`,
+    );
+    db.run(
+      `INSERT INTO stop_times
+         (feed_id, trip_id, stop_id, arrival_time, departure_time, stop_sequence, arrival_seconds, departure_seconds)
+       VALUES
+         ('lirr', 'XFER-SLOW', '171', '10:05:00', '10:05:00', 1, ${10 * 3600 + 5 * 60}, ${10 * 3600 + 5 * 60}),
+         ('lirr', 'XFER-SLOW', '27',  '12:30:00', '12:30:00', 2, ${12 * 3600 + 30 * 60}, ${12 * 3600 + 30 * 60})`,
+    );
+
+    const result = getSchedule(pair, NOW);
+
+    expect(result.departures.map((d) => d.trip_id)).toEqual(['XFER-A', 'XFER-SLOW']);
+    expect(result.departures.map((d) => d.transfers)).toEqual([1, 0]);
+  });
+
+  it('never drops a direct trip another direct trip dominates', () => {
+    // The existing /schedule contract is a board of every departure that
+    // reaches the destination, so a slow through train stays even though a
+    // later one overtakes it.
+    resetDb();
+    seedLirrSchedule();
+    db.run(
+      `INSERT INTO trips (feed_id, trip_id, route_id, service_id, direction_id, trip_headsign, trip_short_name, peak_offpeak)
+       VALUES ('lirr', 'GO201_26_EXP', 'RONK', 'SCHED', 1, 'Penn Station', '1015', 0)`,
+    );
+    db.run(
+      `INSERT INTO stop_times
+         (feed_id, trip_id, stop_id, arrival_time, departure_time, stop_sequence, arrival_seconds, departure_seconds)
+       VALUES
+         ('lirr', 'GO201_26_EXP', '44',  '12:25:00', '12:25:00', 1, ${12 * 3600 + 25 * 60}, ${12 * 3600 + 25 * 60}),
+         ('lirr', 'GO201_26_EXP', '237', '13:00:00', '13:00:00', 2, ${13 * 3600}, ${13 * 3600})`,
+    );
+
+    const result = getSchedule(
+      { fromStopId: '44', feedId: 'lirr', toStopId: '237', date: '20240115', limit: 20 },
+      NOW,
+    );
+
+    expect(result.departures.map((d) => d.trip_id)).toEqual(['GO201_26_SCHED', 'GO201_26_EXP']);
+  });
+
+  it('paginates a mixed page of direct and transfer journeys', () => {
+    db.run(
+      `INSERT INTO trips (feed_id, trip_id, route_id, service_id, direction_id, trip_headsign, trip_short_name, peak_offpeak)
+       VALUES ('lirr', 'XFER-SLOW', 'BABY', 'XSVC', 0, 'Babylon', '800', 0)`,
+    );
+    db.run(
+      `INSERT INTO stop_times
+         (feed_id, trip_id, stop_id, arrival_time, departure_time, stop_sequence, arrival_seconds, departure_seconds)
+       VALUES
+         ('lirr', 'XFER-SLOW', '171', '10:05:00', '10:05:00', 1, ${10 * 3600 + 5 * 60}, ${10 * 3600 + 5 * 60}),
+         ('lirr', 'XFER-SLOW', '27',  '12:30:00', '12:30:00', 2, ${12 * 3600 + 30 * 60}, ${12 * 3600 + 30 * 60})`,
+    );
+
+    const first = getSchedule({ ...pair, limit: 1 }, NOW);
+    expect(first.departures.map((d) => d.trip_id)).toEqual(['XFER-A']);
+    expect(first.next_after).toBe(first.departures[0].departure_timestamp + 1);
+
+    const second = getSchedule({ ...pair, limit: 1, after: first.next_after! }, NOW);
+    expect(second.departures.map((d) => d.trip_id)).toEqual(['XFER-SLOW']);
+    // A full page always hands back a cursor; exhaustion shows on the next one.
+    expect(second.next_after).toBe(second.departures[0].departure_timestamp + 1);
+
+    const third = getSchedule({ ...pair, limit: 1, after: second.next_after! }, NOW);
+    expect(third.departures).toEqual([]);
+    expect(third.next_after).toBeNull();
   });
 });

@@ -230,3 +230,88 @@ export function seedTransfers(): void {
      VALUES ('lirr', '237', '237', 'GO201_26_SCHED', 'GO201_26_SCHED_2', 1)`,
   );
 }
+
+/**
+ * A LIRR fixture shaped like the real branch structure, for the transfer
+ * search. Standalone — it shares no rows with `seedLirrSchedule`, which six
+ * suites pin to exact values.
+ *
+ * Two branches and a city terminal:
+ *
+ *   XFER-A  Port Washington(171) 10:00 -> Woodside(214) 10:30 -> Penn(237) 10:45
+ *   XFER-B  Woodside(214)        10:45 -> Babylon(27)   11:30
+ *   XFER-C  Penn(237)            11:00 -> Babylon(27)   12:00
+ *   XFER-D  Woodside(214)        10:33 -> Babylon(27)   11:10
+ *
+ * So 171 -> 27 has no through train, and which answer is correct depends on
+ * what the feed publishes. XFER-C is the trap: a perfectly timed connection at
+ * Penn Station, which must never be offered because Penn is where the railroad
+ * ends. XFER-D leaves Woodside exactly 180s after XFER-A arrives and reaches
+ * Babylon first, so it wins under the default minimum — and is excluded the
+ * moment `seedTransfersXfer` loads Woodside's own 600s rule, leaving XFER-B.
+ * That difference is what makes the two minimums distinguishable.
+ *
+ * `seedTransfersXfer` adds the transfers.txt rows that label this fixture.
+ */
+export function seedLirrTransferSchedule(): void {
+  db.run(
+    `INSERT INTO stops (feed_id, stop_id, stop_name, stop_lat, stop_lon, location_type, parent_station)
+     VALUES
+       ('lirr', '171', 'Port Washington', 40.82117, -73.69800, 0, NULL),
+       ('lirr', '214', 'Woodside',        40.74569, -73.90295, 0, NULL),
+       ('lirr', '27',  'Babylon',         40.69163, -73.32571, 0, NULL),
+       ('lirr', '237', 'Penn Station',    40.75058, -73.99358, 0, NULL)`,
+  );
+  db.run(
+    `INSERT INTO routes (feed_id, route_id, agency_id, route_short_name, route_long_name, route_color, route_type)
+     VALUES
+       ('lirr', 'PTW', 'LI', NULL, 'Port Washington Branch', '#00985F', 2),
+       ('lirr', 'BABY', 'LI', NULL, 'Babylon Branch', '#00A1DE', 2)`,
+  );
+  db.run(
+    `INSERT INTO trips
+       (feed_id, trip_id, route_id, service_id, direction_id, shape_id,
+        trip_headsign, trip_short_name, block_id, wheelchair_accessible, peak_offpeak)
+     VALUES
+       ('lirr', 'XFER-A', 'PTW',  'XSVC', 1, NULL, 'Penn Station', '300', NULL, 1, 0),
+       ('lirr', 'XFER-B', 'BABY', 'XSVC', 0, NULL, 'Babylon',      '400', NULL, 1, 1),
+       ('lirr', 'XFER-C', 'BABY', 'XSVC', 0, NULL, 'Babylon',      '500', NULL, 1, 0),
+       ('lirr', 'XFER-D', 'BABY', 'XSVC', 0, NULL, 'Babylon',      '600', NULL, 1, 0)`,
+  );
+  db.run(
+    `INSERT INTO stop_times
+       (feed_id, trip_id, stop_id, arrival_time, departure_time, stop_sequence,
+        track, pickup_type, drop_off_type, arrival_seconds, departure_seconds)
+     VALUES
+       ('lirr', 'XFER-A', '171', '10:00:00', '10:00:00', 1, NULL, 0, 0, ${gtfsSeconds(10, 0)},  ${gtfsSeconds(10, 0)}),
+       ('lirr', 'XFER-A', '214', '10:30:00', '10:31:00', 2, '3',  0, 0, ${gtfsSeconds(10, 30)}, ${gtfsSeconds(10, 31)}),
+       ('lirr', 'XFER-A', '237', '10:45:00', '10:45:00', 3, '17', 0, 0, ${gtfsSeconds(10, 45)}, ${gtfsSeconds(10, 45)}),
+       ('lirr', 'XFER-B', '214', '10:44:00', '10:45:00', 1, '2',  0, 0, ${gtfsSeconds(10, 44)}, ${gtfsSeconds(10, 45)}),
+       ('lirr', 'XFER-B', '27',  '11:30:00', '11:30:00', 2, NULL, 0, 0, ${gtfsSeconds(11, 30)}, ${gtfsSeconds(11, 30)}),
+       ('lirr', 'XFER-C', '237', '11:00:00', '11:00:00', 1, '19', 0, 0, ${gtfsSeconds(11, 0)},  ${gtfsSeconds(11, 0)}),
+       ('lirr', 'XFER-C', '27',  '12:00:00', '12:00:00', 2, NULL, 0, 0, ${gtfsSeconds(12, 0)},  ${gtfsSeconds(12, 0)}),
+       ('lirr', 'XFER-D', '214', '10:32:00', '10:33:00', 1, '4',  0, 0, ${gtfsSeconds(10, 32)}, ${gtfsSeconds(10, 33)}),
+       ('lirr', 'XFER-D', '27',  '11:10:00', '11:10:00', 2, NULL, 0, 0, ${gtfsSeconds(11, 10)}, ${gtfsSeconds(11, 10)})`,
+  );
+  // LIRR ships no calendar.txt — service is calendar_dates rows only.
+  db.run(
+    `INSERT INTO calendar_dates (feed_id, service_id, date, exception_type)
+     VALUES ('lirr', 'XSVC', '20240115', 1)`,
+  );
+}
+
+/**
+ * transfers.txt rows for `seedLirrTransferSchedule`: a station rule at
+ * Woodside (600s, deliberately looser than the 180s default so a test can
+ * tell which one was applied) and a guaranteed XFER-A -> XFER-B trip pair.
+ */
+export function seedTransfersXfer(): void {
+  db.run(
+    `INSERT INTO transfers (feed_id, from_stop_id, to_stop_id, transfer_type, min_transfer_time)
+     VALUES ('lirr', '214', '214', 2, 600)`,
+  );
+  db.run(
+    `INSERT INTO transfers (feed_id, from_stop_id, to_stop_id, from_trip_id, to_trip_id, transfer_type)
+     VALUES ('lirr', '214', '214', 'XFER-A', 'XFER-B', 1)`,
+  );
+}
