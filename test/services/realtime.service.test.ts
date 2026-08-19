@@ -753,6 +753,140 @@ describe('getVehiclesForRoute', () => {
     expect(result.vehicles[0].trip_id).toBe('T1');
     expect(result.vehicles[0].current_stop_id).toBe('127N');
     expect(result.vehicles[0].status).toBe('INCOMING_AT');
+    expect(result.vehicles[0].latitude).toBeNull();
+    expect(result.vehicles[0].longitude).toBeNull();
+  });
+
+  it('nulls out latitude/longitude on subway even if the feed publishes a position', async () => {
+    // Subway never actually publishes coordinates, but even a hypothetical
+    // stray position must not leak through - only LIRR is trusted for this.
+    const now = pinClockToMonday();
+    const body = await encodeFeedMessage({
+      header: { gtfsRealtimeVersion: '2.0', timestamp: now },
+      entity: [
+        {
+          id: 'v1',
+          vehicle: {
+            trip: { tripId: 'T1', routeId: '1' },
+            position: { latitude: 40.749, longitude: -73.99 },
+            stopId: '127N',
+            timestamp: now,
+          },
+        },
+      ],
+    });
+    stubFetchWith(body);
+
+    const result = await getVehiclesForRoute('1', 'subway');
+    expect(result.vehicles[0].latitude).toBeNull();
+    expect(result.vehicles[0].longitude).toBeNull();
+  });
+
+  // LIRR shape: vehicle.trip carries no routeId, and the TripUpdate naming the
+  // route is a SEPARATE entity, so the route has to come from a cross-entity
+  // join on trip ID.
+  it('matches LIRR vehicles through the trip update entity, and returns their coordinates', async () => {
+    seedLirr();
+    const now = pinClockToMonday();
+    const body = await encodeFeedMessage({
+      header: { gtfsRealtimeVersion: '2.0', timestamp: now },
+      entity: [
+        {
+          id: 'T1',
+          tripUpdate: { trip: { tripId: 'T1', routeId: 'PW' }, stopTimeUpdate: [] },
+        },
+        {
+          id: 'T1_V',
+          vehicle: {
+            trip: { tripId: 'T1' },
+            position: { latitude: 40.749, longitude: -73.99 },
+            stopId: '1',
+            currentStatus: 1 as never, // STOPPED_AT
+            timestamp: now,
+          },
+        },
+        {
+          id: 'TX',
+          tripUpdate: { trip: { tripId: 'TX', routeId: 'OTHER' }, stopTimeUpdate: [] },
+        },
+        {
+          id: 'TX_V', // different route, must not be returned
+          vehicle: { trip: { tripId: 'TX' }, stopId: '2', timestamp: now },
+        },
+      ],
+    });
+    stubFetchWith(body);
+
+    const result = await getVehiclesForRoute('PW', 'lirr');
+    expect(result.vehicles).toHaveLength(1);
+    expect(result.vehicles[0].trip_id).toBe('T1');
+    expect(result.vehicles[0].current_stop_id).toBe('1');
+    expect(result.vehicles[0].status).toBe('STOPPED_AT');
+    expect(result.vehicles[0].latitude).toBeCloseTo(40.749, 3);
+    expect(result.vehicles[0].longitude).toBeCloseTo(-73.99, 3);
+  });
+
+  // MNR shape: both payloads ride on ONE entity and their trip IDs disagree
+  // (vehicle uses the train number), so only the same-entity trip update
+  // resolves the route - a cross-entity join by trip ID finds nothing.
+  it('matches MNR vehicles through the trip update on the same entity', async () => {
+    seedMnr();
+    const now = pinClockToMonday();
+    const body = await encodeFeedMessage({
+      header: { gtfsRealtimeVersion: '2.0', timestamp: now },
+      entity: [
+        {
+          id: '6341',
+          tripUpdate: { trip: { tripId: '3174374', routeId: 'HUDSON' }, stopTimeUpdate: [] },
+          vehicle: {
+            trip: { tripId: '6341' }, // train number, joins to no trip update
+            stopId: '1',
+            currentStatus: 2 as never, // IN_TRANSIT_TO
+            timestamp: now,
+          },
+        },
+        {
+          id: '9999',
+          tripUpdate: { trip: { tripId: '3179999', routeId: 'OTHER' }, stopTimeUpdate: [] },
+          vehicle: { trip: { tripId: '9999' }, stopId: '2', timestamp: now },
+        },
+      ],
+    });
+    stubFetchWith(body);
+
+    const result = await getVehiclesForRoute('HUDSON', 'mnr');
+    expect(result.vehicles).toHaveLength(1);
+    expect(result.vehicles[0].trip_id).toBe('6341');
+    expect(result.vehicles[0].current_stop_id).toBe('1');
+    expect(result.vehicles[0].status).toBe('IN_TRANSIT_TO');
+  });
+
+  // MNR publishes coordinates for only a minority of vehicles, so the field is
+  // deliberately not surfaced for that feed even when the position is present.
+  it('nulls out latitude/longitude on MNR even when the feed publishes a position', async () => {
+    seedMnr();
+    const now = pinClockToMonday();
+    const body = await encodeFeedMessage({
+      header: { gtfsRealtimeVersion: '2.0', timestamp: now },
+      entity: [
+        {
+          id: '6341',
+          tripUpdate: { trip: { tripId: '3174374', routeId: 'HUDSON' }, stopTimeUpdate: [] },
+          vehicle: {
+            trip: { tripId: '6341' },
+            position: { latitude: 41.815, longitude: -73.562 },
+            stopId: '1',
+            timestamp: now,
+          },
+        },
+      ],
+    });
+    stubFetchWith(body);
+
+    const result = await getVehiclesForRoute('HUDSON', 'mnr');
+    expect(result.vehicles).toHaveLength(1);
+    expect(result.vehicles[0].latitude).toBeNull();
+    expect(result.vehicles[0].longitude).toBeNull();
   });
 
   it('throws NotFoundError when route does not exist', async () => {
@@ -788,6 +922,8 @@ describe('getVehiclesForRoute', () => {
     const result = await getVehiclesForRoute('1', 'subway');
     expect(result.vehicles[0].current_stop_id).toBe('');
     expect(result.vehicles[0].status).toBe('IN_TRANSIT_TO');
+    expect(result.vehicles[0].latitude).toBeNull();
+    expect(result.vehicles[0].longitude).toBeNull();
   });
 });
 

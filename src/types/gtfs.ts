@@ -110,7 +110,13 @@ export interface TripUpdate {
 
 export interface TripDescriptor {
   tripId: string;
-  routeId: string;
+  /**
+   * Optional because a `VehiclePosition`'s descriptor omits it on LIRR and MNR
+   * (0/64 and 0/91 observed) - only their `TripUpdate`s name the route. Present
+   * on every subway vehicle. Resolve it with `resolveVehicleRouteId()` rather
+   * than reading it off a vehicle directly.
+   */
+  routeId?: string;
   startDate?: string;
   directionId?: number;
 }
@@ -149,10 +155,21 @@ export interface StopTimeEvent {
 export interface VehiclePosition {
   trip: TripDescriptor;
   vehicle?: VehicleDescriptor;
+  position?: Position;
   currentStopSequence?: number;
   stopId?: string;
   currentStatus?: VehicleStopStatus;
   timestamp?: number | Long;
+}
+
+/**
+ * Real coordinates, not universally published: always present on LIRR, absent
+ * on every subway feed, present on a minority of Metro-North vehicles. See
+ * mta-gtfs skill's references/realtime.md "Coordinates are not uniform".
+ */
+export interface Position {
+  latitude: number;
+  longitude: number;
 }
 
 export interface VehicleDescriptor {

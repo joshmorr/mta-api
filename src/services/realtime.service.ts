@@ -67,6 +67,35 @@ function resolveVehicle(
   return entity.vehicle ?? vehicleByTripId.get(tripId);
 }
 
+/**
+ * The route a vehicle is running, which only the subway states directly.
+ *
+ * `VehiclePosition.trip.routeId` is set on every subway vehicle (67/67) and on
+ * no LIRR or MNR vehicle at all (0/64, 0/91) - on those feeds only the
+ * TripUpdate descriptor names the route, so filtering vehicles by the
+ * VehiclePosition's own routeId matches nothing and the route looks idle.
+ *
+ * Which TripUpdate to read differs by feed, the same split `resolveVehicle`
+ * handles from the other side: MNR packs both payloads onto one entity and its
+ * two trip IDs disagree, so only the same entity resolves it (91/91 same-entity
+ * vs 0/91 cross-entity), while LIRR splits them across entities and joins by
+ * trip ID (64/64). All three steps together resolve every vehicle on all three
+ * feeds.
+ */
+function resolveVehicleRouteId(
+  entity: FeedMessage['entity'][number],
+  routeByTripId: Map<string, string>,
+): string | undefined {
+  const own = entity.vehicle?.trip?.routeId;
+  if (own) return own;
+
+  const sameEntity = entity.tripUpdate?.trip?.routeId;
+  if (sameEntity) return sameEntity;
+
+  const tripId = entity.vehicle?.trip?.tripId;
+  return tripId ? routeByTripId.get(tripId) : undefined;
+}
+
 /** Subway platform IDs encode direction as an `N`/`S` suffix on the parent ID. */
 function directionFromPlatformId(stopId: string): 'NORTH' | 'SOUTH' | null {
   if (stopId.endsWith('N')) return 'NORTH';
@@ -146,7 +175,12 @@ export async function getArrivalsForStop(
       if (!entity.tripUpdate) continue;
       const { trip, stopTimeUpdate } = entity.tripUpdate;
 
-      if (routeFilter && !routeFilter.includes(trip.routeId)) continue;
+      // A TripUpdate's descriptor always names its route on all three feeds
+      // (115/115 LIRR, 91/91 MNR, 67/67 subway) - it is only VehiclePosition
+      // descriptors that leave routeId unset, so this fallback is unreachable.
+      const tripRouteId = trip.routeId ?? '';
+
+      if (routeFilter && !routeFilter.includes(tripRouteId)) continue;
 
       // Computed once per entity, not per matched stop time update.
       const vehicle = resolveVehicle(entity, trip.tripId, vehicleByTripId);
@@ -195,7 +229,7 @@ export async function getArrivalsForStop(
 
         matched.push({
           feed_id: stop.feed_id,
-          route_id: trip.routeId,
+          route_id: tripRouteId,
           trip_id: trip.tripId,
           arrival_time: arrivalTime,
           arrival_in_seconds: arrivalTime !== null ? arrivalTime - now : null,
@@ -296,10 +330,22 @@ export async function getVehiclesForRoute(routeId: string, feedId: FeedId): Prom
   const now = Math.floor(Date.now() / 1000);
   const vehicles: VehicleResponse[] = [];
 
+  // Coordinates are only reliable on LIRR (always published). Subway never
+  // publishes them, and MNR only publishes them for a minority of vehicles
+  // at any given moment - not worth exposing a mostly-null field for it.
+  const hasCoords = route.feed_id === 'lirr';
+
+  // LIRR names the route only on its TripUpdate entities; see resolveVehicleRouteId.
+  const routeByTripId = new Map<string, string>();
+  for (const entity of feedMessage.entity) {
+    const trip = entity.tripUpdate?.trip;
+    if (trip?.tripId && trip.routeId) routeByTripId.set(trip.tripId, trip.routeId);
+  }
+
   for (const entity of feedMessage.entity) {
     if (!entity.vehicle) continue;
     const v = entity.vehicle;
-    if (v.trip?.routeId !== route.route_id) continue;
+    if (resolveVehicleRouteId(entity, routeByTripId) !== route.route_id) continue;
 
     vehicles.push({
       feed_id: route.feed_id,
@@ -307,6 +353,8 @@ export async function getVehiclesForRoute(routeId: string, feedId: FeedId): Prom
       current_stop_id: v.stopId ?? '',
       status: toStopStatus(v.currentStatus),
       timestamp: toNumber(v.timestamp),
+      latitude: hasCoords ? v.position?.latitude ?? null : null,
+      longitude: hasCoords ? v.position?.longitude ?? null : null,
     });
   }
 

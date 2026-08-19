@@ -110,6 +110,8 @@ export interface VehicleResponse {
   current_stop_id: string;
   status: VehicleStopStatus;
   timestamp: number;
+  latitude: number | null;
+  longitude: number | null;
 }
 
 export interface InformedEntity {
