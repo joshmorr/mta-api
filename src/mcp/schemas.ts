@@ -82,6 +82,10 @@ export const GetScheduleInput = z.object({
       '[yesterday, today, tomorrow] window — gives the whole day\'s timetable when `after` is also omitted.'),
   limit: z.number().int().positive().max(100).default(20)
     .describe('Maximum trips to return, soonest first.'),
+  max_transfers: z.number().int().min(0).max(1).optional()
+    .describe('Train changes to allow. LIRR supports 1 and defaults to it; subway and Metro-North are ' +
+      'direct-only and clamp this to 0. Pass 0 to force direct trips only. The value actually searched ' +
+      'comes back as `max_transfers`.'),
 }).strict();
 
 export const GetTripInput = z.object({

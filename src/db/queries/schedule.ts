@@ -29,6 +29,11 @@ export type ScheduleRow = {
   dest_stop_sequence: number;
   dest_arrival_time: string | null;
   dest_arrival_seconds: number | null;
+  dest_departure_time: string | null;
+  dest_departure_seconds: number | null;
+  dest_track: string | null;
+  dest_pickup_type: number | null;
+  dest_drop_off_type: number | null;
 };
 
 /**
@@ -126,7 +131,9 @@ export function getScheduledDepartures(
          t.direction_id AS direction_id, a.track AS track, t.peak_offpeak AS peak_offpeak,
          a.pickup_type AS pickup_type, a.drop_off_type AS drop_off_type,
          b.stop_id AS dest_stop_id, b.stop_sequence AS dest_stop_sequence,
-         b.arrival_time AS dest_arrival_time, b.arrival_seconds AS dest_arrival_seconds
+         b.arrival_time AS dest_arrival_time, b.arrival_seconds AS dest_arrival_seconds,
+         b.departure_time AS dest_departure_time, b.departure_seconds AS dest_departure_seconds,
+         b.track AS dest_track, b.pickup_type AS dest_pickup_type, b.drop_off_type AS dest_drop_off_type
        FROM stop_times a
        JOIN trips t ON t.feed_id = a.feed_id AND t.trip_id = a.trip_id
        JOIN routes r ON r.feed_id = t.feed_id AND r.route_id = t.route_id
@@ -309,12 +316,15 @@ const LEG_COLUMNS = `
  * The origin side stays a single `stop_id` equality inside a CTE, for exactly
  * the reason `getScheduledDepartures`'s docstring gives — that is the only
  * shape where `idx_stop_times_stop_dep` supplies `ORDER BY departure_seconds`
- * for free and `LIMIT` gets pushed into the index scan rather than being
- * applied after a temp-B-tree sort of every match. `departureLimit` bounds the
- * whole search: the caller merges these against the direct departures and
- * slices to its own `limit`, and both sides are ordered by first-leg departure,
- * so bounding the origin to the first N departures can only drop journeys that
- * sort past the end of the page anyway.
+ * for free and the bound gets pushed into the index scan rather than being
+ * applied after a temp-B-tree sort of every match.
+ *
+ * `untilSeconds` is an inclusive upper bound on the *first leg's* departure,
+ * and it is a correctness knob, not a tuning one. The caller merges these
+ * against the direct departures and slices the union to its own `limit`, so
+ * this must reach at least as far into the day as the direct query did — bound
+ * it any tighter and a page ends up mixing direct trips from all day with
+ * transfer journeys that stop at lunchtime. See `getSchedule`.
  *
  * `excludedStopIds` is the caller's no-transfer-here list — city terminals,
  * plus `fromStopId` and the destination itself. Excluding the destination is
@@ -327,7 +337,7 @@ export function getOutboundLegs(
   excludedStopIds: string[],
   serviceDate: ServiceDateFilter,
   afterSeconds: number,
-  departureLimit: number,
+  untilSeconds: number,
 ): LegRow[] {
   const activeServiceIds = getActiveServiceIds(feedId, serviceDate);
   if (!activeServiceIds.length) return [];
@@ -341,8 +351,8 @@ export function getOutboundLegs(
     feedId,
     fromStopId,
     afterSeconds,
+    untilSeconds,
     ...activeServiceIds,
-    departureLimit,
     ...excludedStopIds,
   ];
 
@@ -358,9 +368,9 @@ export function getOutboundLegs(
          WHERE a.feed_id = ? AND a.stop_id = ?
            AND a.departure_seconds IS NOT NULL
            AND a.departure_seconds >= ?
+           AND a.departure_seconds <= ?
            AND ot.service_id IN (${servicePlaceholders})
          ORDER BY a.departure_seconds ASC, a.trip_id ASC
-         LIMIT ?
        )
        SELECT ${LEG_COLUMNS}
        FROM origin o

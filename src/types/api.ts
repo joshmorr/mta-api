@@ -165,6 +165,67 @@ export interface ScheduledDepartureDestination {
   duration_seconds: number | null;
 }
 
+export interface ScheduleLegStop {
+  stop_id: string;
+  stop_name: string;
+  stop_sequence: number;
+  arrival_time: string | null;
+  arrival_timestamp: number | null;
+  departure_time: string | null;
+  departure_timestamp: number | null;
+  track: string | null;
+  pickup_type: number | null;
+  drop_off_type: number | null;
+}
+
+/** How a rider gets from the previous leg onto this one. */
+export interface ScheduleTransfer {
+  stop_id: string;
+  stop_name: string;
+  /** The previous leg's arrival at this stop. */
+  arrival_timestamp: number;
+  /** This leg's departure from this stop. */
+  departure_timestamp: number;
+  /** Time on the platform between the two. */
+  connection_seconds: number;
+  /**
+   * The feed's own published minimum connection time at this stop
+   * (transfers.txt, transfer_type=2), or `null` where it publishes none - in
+   * which case a default was applied instead.
+   */
+  min_transfer_time: number | null;
+  /**
+   * `true` when transfers.txt guarantees this exact trip pair (transfer_type=1
+   * - the departing train waits). `false` means unenumerated, not unsafe: the
+   * MTA lists guaranteed connections at only a handful of stations and omits
+   * Penn and Woodside entirely.
+   */
+  guaranteed: boolean;
+}
+
+/** One train ride within a journey. */
+export interface ScheduleLeg {
+  /** 0-based position in `legs`. */
+  leg_index: number;
+  feed_id: FeedId;
+  trip_id: string;
+  route_id: string;
+  route_name: string;
+  route_long_name: string;
+  service_id: string;
+  service_date: string;
+  direction_id: 0 | 1 | null;
+  headsign: string | null;
+  train_number: string | null;
+  peak: boolean | null;
+  origin: ScheduleLegStop;
+  destination: ScheduleLegStop;
+  /** Riding time for this leg alone; excludes any wait before boarding it. */
+  duration_seconds: number | null;
+  /** `null` on `leg_index` 0, which nobody transfers onto. */
+  transfer: ScheduleTransfer | null;
+}
+
 export interface ScheduledDeparture {
   feed_id: FeedId;
   trip_id: string;
@@ -191,8 +252,21 @@ export interface ScheduledDeparture {
   peak: boolean | null;
   pickup_type: number | null;
   drop_off_type: number | null;
-  /** Where this trip reaches the requested `to` stop. */
+  /**
+   * Where the journey reaches the requested `to` stop. On a journey with
+   * transfers this describes the *final* leg's arrival, so `duration_seconds`
+   * is the whole journey's door-to-door time and `stop_sequence` is a
+   * sequence within the final leg's trip, not the first's.
+   */
   destination: ScheduledDepartureDestination;
+  /** Number of train changes; `0` on a direct trip. */
+  transfers: number;
+  /**
+   * Every ride in order, always present, always `transfers + 1` entries. On a
+   * direct trip the single leg mirrors the fields above. Fields outside
+   * `legs` and `destination` always describe the *first* leg's boarding.
+   */
+  legs: ScheduleLeg[];
 }
 
 export interface ScheduleResponse {
@@ -205,6 +279,11 @@ export interface ScheduleResponse {
   service_dates: string[];
   generated_at: number;
   source: 'scheduled';
+  /**
+   * The transfer cap actually searched, after clamping the request to what the
+   * feed supports. `0` means only direct trips were considered.
+   */
+  max_transfers: number;
   departures: ScheduledDeparture[];
   /** Cursor for the next page (unix seconds), or `null` on a non-full page. */
   next_after: number | null;

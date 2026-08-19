@@ -234,6 +234,56 @@ export const ScheduledDepartureDestinationSchema = z.object({
   duration_seconds: z.number().nullable().openapi({ description: 'Seconds between this departure and the arrival at `to`.' }),
 }).openapi('ScheduledDepartureDestination');
 
+export const ScheduleLegStopSchema = z.object({
+  stop_id: z.string(),
+  stop_name: z.string(),
+  stop_sequence: z.number().int(),
+  arrival_time: z.string().nullable(),
+  arrival_timestamp: z.number().nullable(),
+  departure_time: z.string().nullable(),
+  departure_timestamp: z.number().nullable(),
+  track: z.string().nullable(),
+  pickup_type: z.number().int().nullable(),
+  drop_off_type: z.number().int().nullable(),
+}).openapi('ScheduleLegStop');
+
+export const ScheduleTransferSchema = z.object({
+  stop_id: z.string(),
+  stop_name: z.string(),
+  arrival_timestamp: z.number().openapi({ description: 'The previous leg\'s arrival at this stop.' }),
+  departure_timestamp: z.number().openapi({ description: 'This leg\'s departure from this stop.' }),
+  connection_seconds: z.number().int().openapi({ description: 'Time on the platform between the two.' }),
+  min_transfer_time: z.number().int().nullable().openapi({
+    description: 'The feed\'s published minimum connection time here (transfers.txt transfer_type=2), or null where it publishes none - a default was applied instead.',
+  }),
+  guaranteed: z.boolean().openapi({
+    description: 'True when transfers.txt guarantees this exact trip pair (transfer_type=1 - the departing train waits). False means unenumerated, not unsafe: the MTA lists guaranteed connections at only a handful of stations.',
+  }),
+}).openapi('ScheduleTransfer');
+
+export const ScheduleLegSchema = z.object({
+  leg_index: z.number().int().openapi({ description: '0-based position in `legs`.' }),
+  feed_id: FeedTypeSchema,
+  trip_id: z.string(),
+  route_id: RouteIdField,
+  route_name: RouteNameField,
+  route_long_name: RouteLongNameField,
+  service_id: z.string(),
+  service_date: z.string(),
+  direction_id: z.union([z.literal(0), z.literal(1)]).nullable(),
+  headsign: z.string().nullable(),
+  train_number: z.string().nullable(),
+  peak: z.boolean().nullable(),
+  origin: ScheduleLegStopSchema,
+  destination: ScheduleLegStopSchema,
+  duration_seconds: z.number().nullable().openapi({
+    description: 'Riding time for this leg alone; excludes any wait before boarding it.',
+  }),
+  transfer: ScheduleTransferSchema.nullable().openapi({
+    description: 'How the rider reached this leg. Null on leg_index 0.',
+  }),
+}).openapi('ScheduleLeg');
+
 export const ScheduledDepartureSchema = z.object({
   feed_id: FeedTypeSchema,
   trip_id: z.string(),
@@ -262,7 +312,11 @@ export const ScheduledDepartureSchema = z.object({
   pickup_type: z.number().int().nullable(),
   drop_off_type: z.number().int().nullable(),
   destination: ScheduledDepartureDestinationSchema.openapi({
-    description: 'Where this trip reaches the requested `to` stop, including duration_seconds.',
+    description: 'Where the journey reaches the requested `to` stop. On a journey with transfers this is the final leg\'s arrival, so duration_seconds is the whole door-to-door time and stop_sequence belongs to the final leg\'s trip.',
+  }),
+  transfers: z.number().int().openapi({ description: 'Number of train changes; 0 on a direct trip.' }),
+  legs: z.array(ScheduleLegSchema).openapi({
+    description: 'Every ride in order, always present, always transfers + 1 entries. On a direct trip the single leg mirrors the fields above; fields outside `legs` and `destination` always describe the first leg\'s boarding.',
   }),
 }).openapi('ScheduledDeparture');
 
@@ -275,6 +329,9 @@ export const ScheduleResponseSchema = z.object({
   service_dates: z.array(z.string()).openapi({ description: 'The service dates actually queried, in query order.' }),
   generated_at: z.number(),
   source: z.literal('scheduled'),
+  max_transfers: z.number().int().openapi({
+    description: 'The transfer cap actually searched, after clamping the request to what the feed supports. 0 means only direct trips were considered.',
+  }),
   departures: z.array(ScheduledDepartureSchema),
   next_after: z.number().nullable().openapi({ description: 'Cursor for the next page (unix seconds), or null on a non-full page.' }),
 }).openapi('ScheduleResponse');
