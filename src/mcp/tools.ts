@@ -191,9 +191,17 @@ export function registerMtaTools(server: McpServer): void {
       description:
         'Scheduled trips from `from` to `to`, sourced from the static GTFS timetable rather than a realtime ' +
         `feed. ${FEED_NOTE}\n\n` +
-        'Both stops are required: every returned departure is one whose trip reaches `to` later, and each ' +
-        'carries a `destination` object with the arrival time there and duration_seconds. Direction is ' +
-        'implied by the pair, so there is no direction parameter.\n\n' +
+        'Both stops are required: every result reaches `to`, and each carries a `destination` object with ' +
+        'the arrival time there and duration_seconds. Direction is implied by the pair, so there is no ' +
+        'direction parameter.\n\n' +
+        'Each result also carries a `legs` array — one entry per train ride — and a `transfers` count. On ' +
+        'LIRR, journeys with one change of train are included (`transfers: 1`), and `legs[1].transfer` ' +
+        'names the interchange, the wait, and whether the connection is guaranteed. This is what makes ' +
+        'branch-to-branch pairs answerable at all: Port Washington to Babylon has no through train, only a ' +
+        'change at Woodside. Subway and Metro-North are direct-only for now, so an empty result there does ' +
+        'not rule out a trip with a change. LIRR never routes a transfer through Penn Station, Grand ' +
+        'Central, Atlantic Terminal, Hunterspoint Avenue, or Long Island City — those are where the ' +
+        'railroad ends, so changing there would mean riding into the city and back out.\n\n' +
         'Unlike mta_get_arrivals, results are unaffected by feed outages and extend arbitrarily far into the ' +
         'future or past: use `date` to look up a specific day, or the default rolling ' +
         '[yesterday, today, tomorrow] window with `after` (Unix seconds) to page forward through it.\n\n' +
@@ -206,9 +214,17 @@ export function registerMtaTools(server: McpServer): void {
       outputSchema: ScheduleResponseSchema,
       annotations: STATIC,
     },
-    async ({ from, feed, to, after, date, limit }) => {
+    async ({ from, feed, to, after, date, limit, max_transfers }) => {
       try {
-        return ok(getSchedule({ fromStopId: from, feedId: feed, toStopId: to, after, date, limit }));
+        return ok(getSchedule({
+          fromStopId: from,
+          feedId: feed,
+          toStopId: to,
+          after,
+          date,
+          limit,
+          maxTransfers: max_transfers,
+        }));
       } catch (err) {
         return toNotFoundToolError(
           err,

@@ -5,6 +5,8 @@ import {
   getTripStops,
   findSubwayTripIdsBySuffix,
   isTripActiveOnDate,
+  getOutboundLegs,
+  getInboundLegs,
 } from '../../../src/db/queries/schedule';
 import { db } from '../../../src/db/client';
 import {
@@ -12,6 +14,7 @@ import {
   seedSubwaySchedule,
   seedLirrSchedule,
   seedMnrSchedule,
+  seedLirrTransferSchedule,
 } from '../../helpers/seed';
 
 // WKDY (subway) and the LIRR/MNR calendar_dates exception are both active on
@@ -245,6 +248,96 @@ describe('db/queries/schedule', () => {
 
     it('false for an unknown trip', () => {
       expect(isTripActiveOnDate('subway', 'nope', MONDAY)).toBe(false);
+    });
+  });
+});
+
+describe('db/queries/schedule - journey legs', () => {
+  beforeEach(() => {
+    resetDb();
+    seedLirrTransferSchedule();
+  });
+
+  const DAY_END = 30 * 3600;
+
+  describe('getOutboundLegs', () => {
+    it('pairs each origin departure with every stop it reaches afterwards', () => {
+      const legs = getOutboundLegs('lirr', '171', [], MONDAY, 0, DAY_END);
+
+      expect(legs.every((l) => l.board_stop_id === '171')).toBe(true);
+      expect(legs.map((l) => l.alight_stop_id)).toEqual(['214', '237']);
+      expect(legs[0].trip_id).toBe('XFER-A');
+      expect(legs[0].board_departure_seconds).toBe(10 * 3600);
+      expect(legs[0].alight_arrival_seconds).toBe(10 * 3600 + 30 * 60);
+      expect(legs[0].route_long_name).toBe('Port Washington Branch');
+      expect(legs[0].train_number).toBe('300');
+      expect(legs[0].alight_track).toBe('3');
+    });
+
+    it('omits excluded stops from the alighting side', () => {
+      const legs = getOutboundLegs('lirr', '171', ['237'], MONDAY, 0, DAY_END);
+
+      expect(legs.map((l) => l.alight_stop_id)).toEqual(['214']);
+    });
+
+    it('bounds the first leg by the departure window', () => {
+      expect(getOutboundLegs('lirr', '171', [], MONDAY, 10 * 3600 + 1, DAY_END)).toEqual([]);
+      expect(getOutboundLegs('lirr', '171', [], MONDAY, 0, 10 * 3600 - 1)).toEqual([]);
+      // Both bounds are inclusive.
+      expect(getOutboundLegs('lirr', '171', [], MONDAY, 10 * 3600, 10 * 3600)).not.toEqual([]);
+    });
+
+    it('excludes trips whose service is not active on the date', () => {
+      expect(getOutboundLegs('lirr', '171', [], SUNDAY, 0, DAY_END)).toEqual([]);
+    });
+
+    it('skips a stop with no published arrival time', () => {
+      db.run(
+        `UPDATE stop_times SET arrival_time = NULL, arrival_seconds = NULL
+         WHERE feed_id = 'lirr' AND trip_id = 'XFER-A' AND stop_id = '214'`,
+      );
+
+      expect(getOutboundLegs('lirr', '171', [], MONDAY, 0, DAY_END).map((l) => l.alight_stop_id))
+        .toEqual(['237']);
+    });
+  });
+
+  describe('getInboundLegs', () => {
+    it('returns every stop a rider could board from to reach the destination', () => {
+      const legs = getInboundLegs('lirr', ['27'], [], MONDAY, 0);
+
+      expect(legs.every((l) => l.alight_stop_id === '27')).toBe(true);
+      expect(new Set(legs.map((l) => l.trip_id))).toEqual(new Set(['XFER-B', 'XFER-C', 'XFER-D']));
+      expect(new Set(legs.map((l) => l.board_stop_id))).toEqual(new Set(['214', '237']));
+    });
+
+    it('omits excluded stops from the boarding side', () => {
+      const legs = getInboundLegs('lirr', ['27'], ['237'], MONDAY, 0);
+
+      expect(new Set(legs.map((l) => l.board_stop_id))).toEqual(new Set(['214']));
+    });
+
+    it('is ordered by boarding stop then departure, so callers can bucket it', () => {
+      const legs = getInboundLegs('lirr', ['27'], [], MONDAY, 0);
+      const keys = legs.map((l) => [l.board_stop_id, l.board_departure_seconds] as const);
+
+      expect(keys).toEqual([...keys].sort((a, b) => a[0].localeCompare(b[0]) || a[1] - b[1]));
+    });
+
+    it('trims second legs departing before the earliest possible connection', () => {
+      // Inclusive: XFER-B leaves Woodside at exactly 10:45, XFER-D at 10:33.
+      const trimmed = getInboundLegs('lirr', ['27'], [], MONDAY, 10 * 3600 + 45 * 60);
+      expect(new Set(trimmed.map((l) => l.trip_id))).toEqual(new Set(['XFER-B', 'XFER-C']));
+
+      expect(getInboundLegs('lirr', ['27'], [], MONDAY, 11 * 3600 + 1)).toEqual([]);
+    });
+
+    it('excludes trips whose service is not active on the date', () => {
+      expect(getInboundLegs('lirr', ['27'], [], SUNDAY, 0)).toEqual([]);
+    });
+
+    it('matches nothing rather than everything for an empty destination set', () => {
+      expect(getInboundLegs('lirr', [], [], MONDAY, 0)).toEqual([]);
     });
   });
 });

@@ -271,10 +271,12 @@ There is no single-station mode. For "what's leaving this station now" use [`/ar
 | `after` | number | now | Unix seconds cursor — only departures at or after this instant. |
 | `date` | string | none | Pin the query to a single `YYYYMMDD` service date instead of the default rolling `[yesterday, today, tomorrow]` window. |
 | `limit` | number | `20` | Max departures (max 100). |
+| `max_transfers` | number | feed max | Train changes to allow. Clamped down to what the feed supports (`lirr` 1; `subway` and `mnr` 0) and echoed back as `max_transfers`. Pass `0` for direct trips only. |
 
 ```
 GET /schedule?from=44&to=237&feed=lirr&limit=5
 GET /schedule?from=127&to=128&feed=subway&date=20260810
+GET /schedule?from=171&to=27&feed=lirr           # no through train: change at Woodside
 ```
 
 Direction is implied by the pair, so there is no direction parameter. On the subway a parent station ID expands to its platforms on both ends, and the trip's own stop order picks the right pair: `from=127&to=128` matches southbound `127S` departures, `from=128&to=127` northbound `128N` ones.
@@ -289,6 +291,7 @@ Direction is implied by the pair, so there is no direction parameter. On the sub
   "service_dates": ["20260809", "20260810", "20260811"],
   "generated_at": 1786379015,
   "source": "scheduled",
+  "max_transfers": 1,
   "departures": [
     {
       "feed_id": "lirr",
@@ -319,12 +322,94 @@ Direction is implied by the pair, so there is no direction parameter. On the sub
         "arrival_time": "13:39:00",
         "arrival_timestamp": 1786383540,
         "duration_seconds": 3840
-      }
+      },
+      "transfers": 0,
+      "legs": [
+        {
+          "leg_index": 0,
+          "feed_id": "lirr",
+          "trip_id": "GO201_26_1951",
+          "route_id": "4",
+          "route_name": "Ronkonkoma Branch",
+          "route_long_name": "Ronkonkoma Branch",
+          "service_id": "EB24D2DC",
+          "service_date": "20260810",
+          "direction_id": 1,
+          "headsign": "Penn Station",
+          "train_number": "1951",
+          "peak": false,
+          "origin": {
+            "stop_id": "44",
+            "stop_name": "Deer Park",
+            "stop_sequence": 4,
+            "arrival_time": "12:35:00",
+            "arrival_timestamp": 1786379700,
+            "departure_time": "12:35:00",
+            "departure_timestamp": 1786379700,
+            "track": null,
+            "pickup_type": 0,
+            "drop_off_type": 0
+          },
+          "destination": {
+            "stop_id": "237",
+            "stop_name": "Penn Station",
+            "stop_sequence": 12,
+            "arrival_time": "13:39:00",
+            "arrival_timestamp": 1786383540,
+            "departure_time": null,
+            "departure_timestamp": null,
+            "track": "17",
+            "pickup_type": 0,
+            "drop_off_type": 0
+          },
+          "duration_seconds": 3840,
+          "transfer": null
+        }
+      ]
     }
   ],
   "next_after": 1786379701
 }
 ```
+
+#### Journeys with a transfer
+
+Every result carries a `legs` array — one entry per train ride — and a `transfers` count. A direct trip is `transfers: 0` with a single leg mirroring the fields beside it, so nothing about the existing shape changed.
+
+**LIRR also returns journeys with one change of train.** This is what makes branch-to-branch pairs answerable at all: Port Washington → Babylon has no through train, and before this the endpoint returned an empty array. Subway and Metro-North are direct-only for now, so an empty result there does not rule out a trip with a change.
+
+On a journey with a transfer, the fields beside `legs` describe the **first leg's boarding**, and `destination` describes arrival at the requested `to` — so `destination.duration_seconds` is the whole door-to-door time and `destination.stop_sequence` belongs to the final leg's trip. The interchange itself hangs off the leg being transferred *onto*:
+
+```json
+{
+  "transfers": 1,
+  "legs": [
+    { "leg_index": 0, "train_number": "425", "transfer": null,
+      "origin": { "stop_id": "171", "stop_name": "Port Washington" },
+      "destination": { "stop_id": "214", "stop_name": "Woodside" } },
+    { "leg_index": 1, "train_number": "132",
+      "origin": { "stop_id": "214", "stop_name": "Woodside" },
+      "destination": { "stop_id": "27", "stop_name": "Babylon" },
+      "transfer": {
+        "stop_id": "214",
+        "stop_name": "Woodside",
+        "arrival_timestamp": 1786382400,
+        "departure_timestamp": 1786383660,
+        "connection_seconds": 1260,
+        "min_transfer_time": null,
+        "guaranteed": false
+      } }
+  ]
+}
+```
+
+`guaranteed` is `true` only when `transfers.txt` names that exact pair of trips as a protected connection (`transfer_type=1` — the departing train waits). **`false` means unenumerated, not unsafe:** the MTA publishes guaranteed connections at seven LIRR stations and omits Penn and Woodside entirely, so most real connections are simply not listed. `min_transfer_time` is the feed's own published minimum at that stop, or `null` where it publishes none, in which case a 180-second default applied.
+
+Connections are searched between 3 minutes (or the stop's own published minimum) and 60 minutes. The upper bound is set from measured coverage: it reaches 99.6% of the LIRR station pairs that have no direct service on every day sampled, where a 30-minute bound drops 6% of them outright on weekends — on sparse weekend branches a 40-minute wait is genuinely the only way to make the trip at that hour.
+
+**A LIRR transfer is never routed through Penn Station, Grand Central, Atlantic Terminal, Hunterspoint Avenue, or Long Island City.** Those are where the railroad ends, so changing trains there would mean riding into the city and straight back out. They are real interchanges — to the subway and Metro-North — but inter-feed journeys aren't supported yet.
+
+Transfer journeys are also pruned against each other and against the through trains: one is dropped when another option leaves no earlier, arrives no later, and costs no more changes. Direct trips are never pruned this way, so `/schedule` remains the full board of departures reaching the destination. Both legs of a journey come from the same service date, so a connection that straddles into the *next* service date is not found — GTFS service days already run past midnight (LIRR to `25:21:00`), so this only affects waits at the very end of the operating day.
 
 This endpoint has no concept of live delays, reroutes, or cancellations — it is the planned timetable. Pagination is a Unix-seconds cursor: fetch the next page with `after=<next_after>` from the previous response; `next_after` is `null` once a page comes back short of `limit`, the signal there's nothing more to page through.
 
@@ -603,7 +688,7 @@ All nine are read-only and non-destructive.
 | `mta_get_stop` | One stop with its platforms, their directions, and its GTFS transfers | |
 | `mta_list_routes` | All routes, optionally for one system | |
 | `mta_get_route` | One route's names and colour | |
-| `mta_get_schedule` | Scheduled trips between two stations, from the static timetable, with trip duration | |
+| `mta_get_schedule` | Scheduled journeys between two stations, from the static timetable, with per-leg detail and trip duration | |
 | `mta_get_trip` | One trip's full stop-by-stop static schedule, resolved from a trip_id | |
 | `mta_get_arrivals` | Upcoming arrivals at a stop, soonest first | ✅ |
 | `mta_get_vehicles` | Trains currently active on a route | ✅ |
@@ -613,7 +698,7 @@ The [feed scoping](#feed-scoping) rule applies: `mta_get_stop`, `mta_get_route`,
 
 `mta_get_schedule` and `mta_get_trip` read only the static timetable, like `mta_get_stop`/`mta_get_route` — they have no live-feed fallback behavior because they never touch a live feed. `mta_get_trip` cannot resolve a Metro-North realtime trip_id to a static one at all (the two ID schemes are unrelated for that feed); its description says so explicitly so an agent doesn't retry.
 
-`mta_get_schedule` requires both `from` and `to`, mirroring the endpoint: it answers "how do I get from A to B, when does it run, how long does it take". An agent asking what's leaving a single station should call `mta_get_arrivals` instead, and both tool descriptions point at each other so the choice doesn't depend on guessing.
+`mta_get_schedule` requires both `from` and `to`, mirroring the endpoint: it answers "how do I get from A to B, when does it run, how long does it take". An agent asking what's leaving a single station should call `mta_get_arrivals` instead, and both tool descriptions point at each other so the choice doesn't depend on guessing. Its description also spells out that LIRR results may include a change of train while subway and Metro-North are direct-only, so an agent reads an empty subway result as "not yet supported" rather than "no such trip".
 
 Realtime tools degrade the way the HTTP endpoints do: when an upstream feed cannot be reached, cached data is returned with `stale: true` and a `feed_error`, rather than the call failing.
 
