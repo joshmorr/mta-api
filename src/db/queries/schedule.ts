@@ -243,3 +243,203 @@ export function isTripActiveOnDate(feedId: FeedId, tripId: string, serviceDate: 
     .get(feedId, tripId, ...params);
   return !!row;
 }
+
+/**
+ * One leg of a journey: a boarding stop_time, an alighting stop_time later on
+ * the same trip, and that trip's metadata. `getOutboundLegs` and
+ * `getInboundLegs` both return this shape, so the transfer search can pair
+ * them without caring which side produced which.
+ *
+ * Deliberately carries no stop *names*. Joining `stops` twice made SQLite
+ * reorder `getInboundLegs` to drive from the stops table and scan every stop's
+ * departures (23ms vs 1ms). The caller resolves the handful of distinct IDs
+ * that survive the search through `getStopNamesByIds` instead.
+ */
+export type LegRow = {
+  feed_id: FeedId;
+  trip_id: string;
+  route_id: string;
+  route_short_name: string | null;
+  route_long_name: string | null;
+  service_id: string;
+  headsign: string | null;
+  train_number: string | null;
+  direction_id: number | null;
+  peak_offpeak: number | null;
+  board_stop_id: string;
+  board_stop_sequence: number;
+  board_arrival_time: string | null;
+  board_arrival_seconds: number | null;
+  board_departure_time: string;
+  board_departure_seconds: number;
+  board_track: string | null;
+  board_pickup_type: number | null;
+  board_drop_off_type: number | null;
+  alight_stop_id: string;
+  alight_stop_sequence: number;
+  alight_arrival_time: string | null;
+  alight_arrival_seconds: number;
+  alight_departure_time: string | null;
+  alight_departure_seconds: number | null;
+  alight_track: string | null;
+  alight_pickup_type: number | null;
+  alight_drop_off_type: number | null;
+};
+
+const LEG_COLUMNS = `
+  o.feed_id AS feed_id, o.trip_id AS trip_id, t.route_id AS route_id,
+  r.route_short_name AS route_short_name, r.route_long_name AS route_long_name,
+  t.service_id AS service_id, t.trip_headsign AS headsign,
+  t.trip_short_name AS train_number, t.direction_id AS direction_id,
+  t.peak_offpeak AS peak_offpeak,
+  o.stop_id AS board_stop_id, o.stop_sequence AS board_stop_sequence,
+  o.arrival_time AS board_arrival_time, o.arrival_seconds AS board_arrival_seconds,
+  o.departure_time AS board_departure_time, o.departure_seconds AS board_departure_seconds,
+  o.track AS board_track, o.pickup_type AS board_pickup_type, o.drop_off_type AS board_drop_off_type,
+  d.stop_id AS alight_stop_id, d.stop_sequence AS alight_stop_sequence,
+  d.arrival_time AS alight_arrival_time, d.arrival_seconds AS alight_arrival_seconds,
+  d.departure_time AS alight_departure_time, d.departure_seconds AS alight_departure_seconds,
+  d.track AS alight_track, d.pickup_type AS alight_pickup_type, d.drop_off_type AS alight_drop_off_type`;
+
+/**
+ * First legs of a candidate transfer journey: departures from `fromStopId`,
+ * each paired with every stop that trip reaches afterwards where a rider
+ * could get off and change trains.
+ *
+ * The origin side stays a single `stop_id` equality inside a CTE, for exactly
+ * the reason `getScheduledDepartures`'s docstring gives — that is the only
+ * shape where `idx_stop_times_stop_dep` supplies `ORDER BY departure_seconds`
+ * for free and `LIMIT` gets pushed into the index scan rather than being
+ * applied after a temp-B-tree sort of every match. `departureLimit` bounds the
+ * whole search: the caller merges these against the direct departures and
+ * slices to its own `limit`, and both sides are ordered by first-leg departure,
+ * so bounding the origin to the first N departures can only drop journeys that
+ * sort past the end of the page anyway.
+ *
+ * `excludedStopIds` is the caller's no-transfer-here list — city terminals,
+ * plus `fromStopId` and the destination itself. Excluding the destination is
+ * not an optimization: a first leg that already reaches it *is* a direct trip,
+ * and `getScheduledDepartures` already returned it.
+ */
+export function getOutboundLegs(
+  feedId: FeedId,
+  fromStopId: string,
+  excludedStopIds: string[],
+  serviceDate: ServiceDateFilter,
+  afterSeconds: number,
+  departureLimit: number,
+): LegRow[] {
+  const activeServiceIds = getActiveServiceIds(feedId, serviceDate);
+  if (!activeServiceIds.length) return [];
+
+  const servicePlaceholders = activeServiceIds.map(() => '?').join(',');
+  const excludedSql = excludedStopIds.length
+    ? ` AND d.stop_id NOT IN (${excludedStopIds.map(() => '?').join(',')})`
+    : '';
+
+  const params: Array<string | number> = [
+    feedId,
+    fromStopId,
+    afterSeconds,
+    ...activeServiceIds,
+    departureLimit,
+    ...excludedStopIds,
+  ];
+
+  return db
+    .query<LegRow, Array<string | number>>(
+      `WITH origin AS (
+         SELECT a.feed_id, a.trip_id, a.stop_id, a.stop_sequence,
+                a.arrival_time, a.arrival_seconds,
+                a.departure_time, a.departure_seconds,
+                a.track, a.pickup_type, a.drop_off_type
+         FROM stop_times a
+         JOIN trips ot ON ot.feed_id = a.feed_id AND ot.trip_id = a.trip_id
+         WHERE a.feed_id = ? AND a.stop_id = ?
+           AND a.departure_seconds IS NOT NULL
+           AND a.departure_seconds >= ?
+           AND ot.service_id IN (${servicePlaceholders})
+         ORDER BY a.departure_seconds ASC, a.trip_id ASC
+         LIMIT ?
+       )
+       SELECT ${LEG_COLUMNS}
+       FROM origin o
+       JOIN stop_times d
+           ON d.feed_id = o.feed_id
+          AND d.trip_id = o.trip_id
+          AND d.stop_sequence > o.stop_sequence
+          AND d.arrival_seconds IS NOT NULL${excludedSql}
+       JOIN trips t ON t.feed_id = o.feed_id AND t.trip_id = o.trip_id
+       JOIN routes r ON r.feed_id = t.feed_id AND r.route_id = t.route_id
+       ORDER BY o.departure_seconds ASC, o.trip_id ASC, d.stop_sequence ASC`,
+    )
+    .all(...params);
+}
+
+/**
+ * Second legs of a candidate transfer journey: every stop from which a rider
+ * could board a trip that later reaches one of `toStopIds`.
+ *
+ * Driven from the destination side, which is what keeps it bounded — only
+ * trips actually serving the destination are considered, and each contributes
+ * its own upstream stops. `earliestDepartureSeconds` trims the front: a second
+ * leg can never depart before the earliest connection the caller could
+ * possibly make (its `afterSeconds` plus the shortest legal connection time).
+ * Measured on a whole LIRR service day this returns 600–950 rows in ~1ms, so
+ * the caller loads it once per service date and buckets it in memory rather
+ * than issuing a query per candidate transfer point.
+ *
+ * `toStopIds` is an IN-list for the same reason `getScheduledDepartures`'s is:
+ * it does not drive the ordering, so it costs nothing to widen it to a subway
+ * parent station's platforms.
+ */
+export function getInboundLegs(
+  feedId: FeedId,
+  toStopIds: string[],
+  excludedStopIds: string[],
+  serviceDate: ServiceDateFilter,
+  earliestDepartureSeconds: number,
+): LegRow[] {
+  // Same short-circuit as getScheduledDepartures: an empty destination set
+  // must match nothing, never degrade into "no filter".
+  if (toStopIds.length === 0) return [];
+
+  const activeServiceIds = getActiveServiceIds(feedId, serviceDate);
+  if (!activeServiceIds.length) return [];
+
+  const servicePlaceholders = activeServiceIds.map(() => '?').join(',');
+  const excludedSql = excludedStopIds.length
+    ? ` AND o.stop_id NOT IN (${excludedStopIds.map(() => '?').join(',')})`
+    : '';
+
+  // Bound in the order the `?`s appear in the compiled SQL text, not the
+  // order the clauses read: the excluded-stop list sits in the `o` join, which
+  // precedes the WHERE clause entirely.
+  const params: Array<string | number> = [
+    ...excludedStopIds,
+    feedId,
+    ...toStopIds,
+    earliestDepartureSeconds,
+    ...activeServiceIds,
+  ];
+
+  return db
+    .query<LegRow, Array<string | number>>(
+      `SELECT ${LEG_COLUMNS}
+       FROM stop_times d
+       JOIN stop_times o
+           ON o.feed_id = d.feed_id
+          AND o.trip_id = d.trip_id
+          AND o.stop_sequence < d.stop_sequence
+          AND o.departure_seconds IS NOT NULL${excludedSql}
+       JOIN trips t ON t.feed_id = d.feed_id AND t.trip_id = d.trip_id
+       JOIN routes r ON r.feed_id = t.feed_id AND r.route_id = t.route_id
+       WHERE d.feed_id = ?
+         AND d.stop_id IN (${toStopIds.map(() => '?').join(',')})
+         AND d.arrival_seconds IS NOT NULL
+         AND o.departure_seconds >= ?
+         AND t.service_id IN (${servicePlaceholders})
+       ORDER BY o.stop_id ASC, o.departure_seconds ASC`,
+    )
+    .all(...params);
+}
