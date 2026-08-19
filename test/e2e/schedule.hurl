@@ -46,6 +46,48 @@ jsonpath "$.from_stop_name" contains "Deer Park"
 jsonpath "$.to_stop_name" contains "Penn"
 jsonpath "$.departures[0].destination.stop_name" contains "Penn"
 jsonpath "$.departures[0].destination.duration_seconds" > 0
+jsonpath "$.max_transfers" == 1
+jsonpath "$.departures[0].transfers" == 0
+jsonpath "$.departures[0].legs" count == 1
+jsonpath "$.departures[0].legs[0].transfer" == null
+
+# --- LIRR branch-to-branch: no through train, so change at Woodside ----------
+# Port Washington(171) -> Babylon(27) is only answerable with a transfer, and
+# never through Penn/Grand Central/Atlantic Terminal - see EXCLUDED_TRANSFER_STOP_IDS.
+GET {{base}}/schedule?from=171&to=27&feed=lirr&limit=3
+HTTP 200
+[Asserts]
+jsonpath "$.from_stop_name" contains "Port Washington"
+jsonpath "$.to_stop_name" contains "Babylon"
+jsonpath "$.max_transfers" == 1
+jsonpath "$.departures[0].transfers" == 1
+jsonpath "$.departures[0].legs" count == 2
+jsonpath "$.departures[0].legs[0].leg_index" == 0
+jsonpath "$.departures[0].legs[0].transfer" == null
+jsonpath "$.departures[0].legs[1].transfer.stop_id" == "214"
+jsonpath "$.departures[0].legs[1].transfer.connection_seconds" > 0
+jsonpath "$.departures[0].legs[1].transfer.guaranteed" isBoolean
+jsonpath "$.departures[0].destination.stop_name" contains "Babylon"
+
+# --- max_transfers=0 forces direct only, so that pair has no answer ----------
+GET {{base}}/schedule?from=171&to=27&feed=lirr&max_transfers=0
+HTTP 200
+[Asserts]
+jsonpath "$.max_transfers" == 0
+jsonpath "$.departures" count == 0
+
+# --- subway clamps to direct-only for now -----------------------------------
+GET {{base}}/schedule?from=127&to=128&feed=subway&limit=2&max_transfers=1
+HTTP 200
+[Asserts]
+jsonpath "$.max_transfers" == 0
+jsonpath "$.departures[0].transfers" == 0
+
+# --- a transfer count no feed supports is a 400, not a clamp ----------------
+GET {{base}}/schedule?from=44&to=237&feed=lirr&max_transfers=2
+HTTP 400
+[Asserts]
+jsonpath "$.code" == "INVALID_PARAM"
 
 # --- date pins to a single service date, not the default 3-day window -------
 GET {{base}}/schedule?from=127&to=128&feed=subway&date=20260101&limit=1

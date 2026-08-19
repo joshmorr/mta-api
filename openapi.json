@@ -793,6 +793,10 @@
               "scheduled"
             ]
           },
+          "max_transfers": {
+            "type": "integer",
+            "description": "The transfer cap actually searched, after clamping the request to what the feed supports. 0 means only direct trips were considered."
+          },
           "departures": {
             "type": "array",
             "items": {
@@ -814,6 +818,7 @@
           "service_dates",
           "generated_at",
           "source",
+          "max_transfers",
           "departures",
           "next_after"
         ]
@@ -930,6 +935,17 @@
           },
           "destination": {
             "$ref": "#/components/schemas/ScheduledDepartureDestination"
+          },
+          "transfers": {
+            "type": "integer",
+            "description": "Number of train changes; 0 on a direct trip."
+          },
+          "legs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ScheduleLeg"
+            },
+            "description": "Every ride in order, always present, always transfers + 1 entries. On a direct trip the single leg mirrors the fields above; fields outside `legs` and `destination` always describe the first leg's boarding."
           }
         },
         "required": [
@@ -954,7 +970,9 @@
           "peak",
           "pickup_type",
           "drop_off_type",
-          "destination"
+          "destination",
+          "transfers",
+          "legs"
         ]
       },
       "ScheduledDepartureDestination": {
@@ -991,7 +1009,210 @@
           "arrival_timestamp",
           "duration_seconds"
         ],
-        "description": "Where this trip reaches the requested `to` stop, including duration_seconds."
+        "description": "Where the journey reaches the requested `to` stop. On a journey with transfers this is the final leg's arrival, so duration_seconds is the whole door-to-door time and stop_sequence belongs to the final leg's trip."
+      },
+      "ScheduleLeg": {
+        "type": "object",
+        "properties": {
+          "leg_index": {
+            "type": "integer",
+            "description": "0-based position in `legs`."
+          },
+          "feed_id": {
+            "type": "string",
+            "enum": [
+              "subway",
+              "lirr",
+              "mnr"
+            ],
+            "description": "Transit feed identifier",
+            "example": "subway"
+          },
+          "trip_id": {
+            "type": "string"
+          },
+          "route_id": {
+            "type": "string",
+            "description": "Internal GTFS route identifier. Not a display label — on LIRR and Metro-North it is an opaque number (\"4\" is the Ronkonkoma Branch). Use `route_name` when showing this to a user.",
+            "example": "4"
+          },
+          "route_name": {
+            "type": "string",
+            "description": "Rider-facing name for the route: the subway bullet (\"A\", \"7\") or the commuter-rail branch (\"Ronkonkoma Branch\"). Never empty — falls back to `route_id` if the schedule names no route.",
+            "example": "Ronkonkoma Branch"
+          },
+          "route_long_name": {
+            "type": "string",
+            "description": "Longer route name where one exists, otherwise the same value as `route_name`.",
+            "example": "Ronkonkoma Branch"
+          },
+          "service_id": {
+            "type": "string"
+          },
+          "service_date": {
+            "type": "string"
+          },
+          "direction_id": {
+            "anyOf": [
+              {
+                "type": "number",
+                "enum": [
+                  0
+                ]
+              },
+              {
+                "type": "number",
+                "enum": [
+                  1
+                ]
+              },
+              {
+                "nullable": true
+              }
+            ]
+          },
+          "headsign": {
+            "type": "string",
+            "nullable": true
+          },
+          "train_number": {
+            "type": "string",
+            "nullable": true
+          },
+          "peak": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "origin": {
+            "$ref": "#/components/schemas/ScheduleLegStop"
+          },
+          "destination": {
+            "$ref": "#/components/schemas/ScheduleLegStop"
+          },
+          "duration_seconds": {
+            "type": "number",
+            "nullable": true,
+            "description": "Riding time for this leg alone; excludes any wait before boarding it."
+          },
+          "transfer": {
+            "$ref": "#/components/schemas/ScheduleTransfer"
+          }
+        },
+        "required": [
+          "leg_index",
+          "feed_id",
+          "trip_id",
+          "route_id",
+          "route_name",
+          "route_long_name",
+          "service_id",
+          "service_date",
+          "direction_id",
+          "headsign",
+          "train_number",
+          "peak",
+          "origin",
+          "destination",
+          "duration_seconds",
+          "transfer"
+        ]
+      },
+      "ScheduleLegStop": {
+        "type": "object",
+        "properties": {
+          "stop_id": {
+            "type": "string"
+          },
+          "stop_name": {
+            "type": "string"
+          },
+          "stop_sequence": {
+            "type": "integer"
+          },
+          "arrival_time": {
+            "type": "string",
+            "nullable": true
+          },
+          "arrival_timestamp": {
+            "type": "number",
+            "nullable": true
+          },
+          "departure_time": {
+            "type": "string",
+            "nullable": true
+          },
+          "departure_timestamp": {
+            "type": "number",
+            "nullable": true
+          },
+          "track": {
+            "type": "string",
+            "nullable": true
+          },
+          "pickup_type": {
+            "type": "integer",
+            "nullable": true
+          },
+          "drop_off_type": {
+            "type": "integer",
+            "nullable": true
+          }
+        },
+        "required": [
+          "stop_id",
+          "stop_name",
+          "stop_sequence",
+          "arrival_time",
+          "arrival_timestamp",
+          "departure_time",
+          "departure_timestamp",
+          "track",
+          "pickup_type",
+          "drop_off_type"
+        ]
+      },
+      "ScheduleTransfer": {
+        "type": "object",
+        "nullable": true,
+        "properties": {
+          "stop_id": {
+            "type": "string"
+          },
+          "stop_name": {
+            "type": "string"
+          },
+          "arrival_timestamp": {
+            "type": "number",
+            "description": "The previous leg's arrival at this stop."
+          },
+          "departure_timestamp": {
+            "type": "number",
+            "description": "This leg's departure from this stop."
+          },
+          "connection_seconds": {
+            "type": "integer",
+            "description": "Time on the platform between the two."
+          },
+          "min_transfer_time": {
+            "type": "integer",
+            "nullable": true,
+            "description": "The feed's published minimum connection time here (transfers.txt transfer_type=2), or null where it publishes none - a default was applied instead."
+          },
+          "guaranteed": {
+            "type": "boolean",
+            "description": "True when transfers.txt guarantees this exact trip pair (transfer_type=1 - the departing train waits). False means unenumerated, not unsafe: the MTA lists guaranteed connections at only a handful of stations."
+          }
+        },
+        "required": [
+          "stop_id",
+          "stop_name",
+          "arrival_timestamp",
+          "departure_timestamp",
+          "connection_seconds",
+          "min_transfer_time",
+          "guaranteed"
+        ],
+        "description": "How the rider reached this leg. Null on leg_index 0."
       },
       "TripScheduleResponse": {
         "type": "object",
@@ -1778,7 +1999,7 @@
         ],
         "operationId": "getSchedule",
         "summary": "Get scheduled trips between two stations",
-        "description": "Returns scheduled trips from `from` to `to`, sourced from the static GTFS timetable (not realtime). Every departure reaches `to` later in its trip and carries a `destination` block with the arrival time there and duration_seconds. Unlike /arrivals, results are unaffected by feed outages and extend arbitrarily far into the future. For single-station departures right now, use /arrivals instead.",
+        "description": "Returns scheduled trips from `from` to `to`, sourced from the static GTFS timetable (not realtime). Every result reaches `to` and carries a `destination` block with the arrival time there and duration_seconds, plus a `legs` array describing each train ride. LIRR also returns journeys with one change of train (`transfers: 1`), where `legs[1].transfer` gives the interchange, the wait, and whether the connection is guaranteed; other feeds are direct-only for now. Unlike /arrivals, results are unaffected by feed outages and extend arbitrarily far into the future. For single-station departures right now, use /arrivals instead.",
         "parameters": [
           {
             "schema": {
@@ -1854,6 +2075,20 @@
             "required": false,
             "description": "Max departures to return (clamped to 100, default 20)",
             "name": "limit",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "nullable": true,
+              "minimum": 0,
+              "maximum": 1,
+              "description": "Train changes to allow. Clamped down to what the feed supports (lirr 1; subway and mnr 0), and echoed back as `max_transfers`. Defaults to the feed maximum; pass 0 for direct trips only.",
+              "example": 1
+            },
+            "required": false,
+            "description": "Train changes to allow. Clamped down to what the feed supports (lirr 1; subway and mnr 0), and echoed back as `max_transfers`. Defaults to the feed maximum; pass 0 for direct trips only.",
+            "name": "max_transfers",
             "in": "query"
           }
         ],
