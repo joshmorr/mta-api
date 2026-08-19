@@ -38,6 +38,7 @@ describe('getRoute', () => {
     resetDb();
     seedSubway();
     seedLirr();
+    seedMnr();
   });
 
   it('returns null for an unknown route', () => {
@@ -69,6 +70,39 @@ describe('getRoute', () => {
     expect(getRoute('NEITHER', 'subway')).toMatchObject({
       name: 'NEITHER',
       long_name: 'NEITHER',
+    });
+  });
+
+  // MNR ships an empty CSV field rather than omitting the value, so a blank
+  // name reaches the DB as '' and not NULL. A `??` fallback passes it through
+  // and names every MNR route ''.
+  it('treats an empty name as blank, not as a value', () => {
+    db.run(
+      `INSERT INTO routes (feed_id, route_id, agency_id, route_short_name, route_long_name, route_color, route_type)
+       VALUES
+         ('subway', 'EMPTYSHORT', 'MTA', '',   'Empty Short', NULL, 1),
+         ('subway', 'EMPTYLONG',  'MTA', 'EL', '',            NULL, 1),
+         ('subway', 'EMPTYBOTH',  'MTA', '',   '',            NULL, 1)`,
+    );
+
+    expect(getRoute('EMPTYSHORT', 'subway')).toMatchObject({
+      name: 'Empty Short',
+      long_name: 'Empty Short',
+    });
+    expect(getRoute('EMPTYLONG', 'subway')).toMatchObject({
+      name: 'EL',
+      long_name: 'EL',
+    });
+    expect(getRoute('EMPTYBOTH', 'subway')).toMatchObject({
+      name: 'EMPTYBOTH',
+      long_name: 'EMPTYBOTH',
+    });
+  });
+
+  it('names MNR routes by their branch, which publish a blank short name', () => {
+    expect(getRoute('HUDSON', 'mnr')).toMatchObject({
+      name: 'Hudson Line',
+      long_name: 'Hudson Line',
     });
   });
 
