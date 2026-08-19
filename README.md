@@ -259,9 +259,9 @@ When the upstream RT fetch fails but a cached feed is available, the response is
 
 ### `GET /schedule`
 
-Scheduled trips **between two stations**, sourced from the static GTFS timetable rather than realtime feeds — unaffected by feed outages, and not limited to the near future. `from`, `to` and `feed` are all required: every departure returned is one whose trip reaches `to` later, carrying a `destination` object with the arrival time there and how long the ride takes.
+Scheduled trips **between two stations**, from the static GTFS timetable — not realtime, so it's unaffected by feed outages and isn't limited to the near future. `from`, `to`, and `feed` are all required; each departure carries a `destination` object with arrival time and ride duration.
 
-There is no single-station mode. For "what's leaving this station now" use [`/arrivals`](#get-arrivals), which sees live delays, reroutes, and cancellations that a static timetable cannot; omitting `to` here is a `400` saying so.
+No single-station mode — use [`/arrivals`](#get-arrivals) for "what's leaving now" (it sees live delays/reroutes/cancellations). Omitting `to` is a `400`.
 
 | Param | Type | Default | Description |
 |-------|------|---------|-------------|
@@ -279,7 +279,7 @@ GET /schedule?from=127&to=128&feed=subway&date=20260810
 GET /schedule?from=171&to=27&feed=lirr           # no through train: change at Woodside
 ```
 
-Direction is implied by the pair, so there is no direction parameter. On the subway a parent station ID expands to its platforms on both ends, and the trip's own stop order picks the right pair: `from=127&to=128` matches southbound `127S` departures, `from=128&to=127` northbound `128N` ones.
+Direction is implied by the pair (no direction param). On the subway a parent station ID expands to its platforms on both ends: `from=127&to=128` matches southbound `127S` departures, `from=128&to=127` northbound `128N`.
 
 ```json
 {
@@ -374,50 +374,15 @@ Direction is implied by the pair, so there is no direction parameter. On the sub
 
 #### Journeys with a transfer
 
-Every result carries a `legs` array — one entry per train ride — and a `transfers` count. A direct trip is `transfers: 0` with a single leg mirroring the fields beside it, so nothing about the existing shape changed.
+Every result has a `legs` array (one per train ride) and a `transfers` count; a direct trip is `transfers: 0` with one leg mirroring the fields beside it.
 
-**LIRR also returns journeys with one change of train.** This is what makes branch-to-branch pairs answerable at all: Port Washington → Babylon has no through train, and before this the endpoint returned an empty array. Subway and Metro-North are direct-only for now, so an empty result there does not rule out a trip with a change.
+On a transfer journey, the fields beside `legs` describe the first leg's boarding and `destination` describes arrival at `to`. The interchange hangs off the leg being transferred *onto*, as a `transfer` object (`stop_id`, `stop_name`, `arrival_timestamp`, `departure_timestamp`, `connection_seconds`, `min_transfer_time`, `guaranteed`).
 
-On a journey with a transfer, the fields beside `legs` describe the **first leg's boarding**, and `destination` describes arrival at the requested `to` — so `destination.duration_seconds` is the whole door-to-door time and `destination.stop_sequence` belongs to the final leg's trip. The interchange itself hangs off the leg being transferred *onto*:
+Connections are searched between 3–60 minutes and never routed through Penn Station, Grand Central, Atlantic Terminal, Hunterspoint Avenue, or Long Island City (railroad termini, not real interchanges). Dominated transfer journeys are pruned; direct trips never are. Both legs must share a service date.
 
-```json
-{
-  "transfers": 1,
-  "legs": [
-    { "leg_index": 0, "train_number": "425", "transfer": null,
-      "origin": { "stop_id": "171", "stop_name": "Port Washington" },
-      "destination": { "stop_id": "214", "stop_name": "Woodside" } },
-    { "leg_index": 1, "train_number": "132",
-      "origin": { "stop_id": "214", "stop_name": "Woodside" },
-      "destination": { "stop_id": "27", "stop_name": "Babylon" },
-      "transfer": {
-        "stop_id": "214",
-        "stop_name": "Woodside",
-        "arrival_timestamp": 1786382400,
-        "departure_timestamp": 1786383660,
-        "connection_seconds": 1260,
-        "min_transfer_time": null,
-        "guaranteed": false
-      } }
-  ]
-}
-```
+Planned timetable only — no live delays/reroutes/cancellations. Pagination is a Unix-seconds cursor (`after=<next_after>`; `null` once a page is short of `limit`). `date` pins one service date; omitted, it spans a rolling 3-day window (so late-night queries still catch overnight trips with GTFS times past `24:00:00`).
 
-`guaranteed` is `true` only when `transfers.txt` names that exact pair of trips as a protected connection (`transfer_type=1` — the departing train waits). **`false` means unenumerated, not unsafe:** the MTA publishes guaranteed connections at seven LIRR stations and omits Penn and Woodside entirely, so most real connections are simply not listed. `min_transfer_time` is the feed's own published minimum at that stop, or `null` where it publishes none, in which case a 180-second default applied.
-
-Connections are searched between 3 minutes (or the stop's own published minimum) and 60 minutes. The upper bound is set from measured coverage: it reaches 99.6% of the LIRR station pairs that have no direct service on every day sampled, where a 30-minute bound drops 6% of them outright on weekends — on sparse weekend branches a 40-minute wait is genuinely the only way to make the trip at that hour.
-
-**A LIRR transfer is never routed through Penn Station, Grand Central, Atlantic Terminal, Hunterspoint Avenue, or Long Island City.** Those are where the railroad ends, so changing trains there would mean riding into the city and straight back out. They are real interchanges — to the subway and Metro-North — but inter-feed journeys aren't supported yet.
-
-Transfer journeys are also pruned against each other and against the through trains: one is dropped when another option leaves no earlier, arrives no later, and costs no more changes. Direct trips are never pruned this way, so `/schedule` remains the full board of departures reaching the destination. Both legs of a journey come from the same service date, so a connection that straddles into the *next* service date is not found — GTFS service days already run past midnight (LIRR to `25:21:00`), so this only affects waits at the very end of the operating day.
-
-This endpoint has no concept of live delays, reroutes, or cancellations — it is the planned timetable. Pagination is a Unix-seconds cursor: fetch the next page with `after=<next_after>` from the previous response; `next_after` is `null` once a page comes back short of `limit`, the signal there's nothing more to page through.
-
-`date` pins the query to one service date and returns that day's whole set of trips for the pair (paginated by `limit`/`after` within it); omitted, the query spans the rolling 3-day window instead, which is what lets a query made late at night still surface an overnight trip whose GTFS time is past `24:00:00`.
-
-An empty `departures` array with a `200` means no trip connects the two stops in that direction on the queried dates — a stop that doesn't exist at all is a `404` instead, naming whether the origin or the destination was the problem.
-
-`direction_id` is the raw static GTFS value (feed-defined, not derived) — see the branch-relative-not-compass caveat under `/arrivals` above. `peak` is the railroad's own fare-period designation (`true`/`false`) for LIRR/MNR, `null` on subway (no such concept) and wherever the source feed doesn't publish it — it is never derived from the departure time.
+An empty `departures` array (`200`) means no trip connects the pair on those dates; a nonexistent stop is a `404` naming which side was the problem. `direction_id` is the raw GTFS value. `peak` is the railroad's fare-period flag for LIRR/MNR, `null` on subway or wherever the feed doesn't publish it.
 
 ---
 
