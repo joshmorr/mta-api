@@ -167,7 +167,7 @@ Get a single stop. Accepts parent station IDs or platform IDs. `feed` is require
 GET /stops/127?feed=subway
 GET /stops/127N?feed=subway
 GET /stops/1?feed=lirr
-u``
+```
 
 ```json
 {
