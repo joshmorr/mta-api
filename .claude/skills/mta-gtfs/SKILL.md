@@ -64,6 +64,13 @@ by bare ID is unanswerable.
 not `L28`. Querying arrivals by a parent station ID returns nothing at all, which looks
 like "no trains" rather than like a bug.
 
+**A vehicle only names its route on the subway.** `VehiclePosition.trip.route_id` is set
+on every subway vehicle and on no LIRR or MNR one (0/64, 0/91) — there, only the
+`TripUpdate` names the route. Filtering vehicles by their own `route_id` returns an empty
+list on both railroads, the same "no trains" false negative as the parent-station trap.
+Recovering it takes a per-feed join: MNR from the *same* entity, LIRR from a cross-entity
+trip-ID map, and neither alone covers both. See `references/realtime.md`.
+
 **The subway is not one producer.** `nyct/gtfs-l` carries `stop_sequence`, `delay`,
 `uncertainty`, and `schedule_relationship`; the other seven subway feeds carry none of
 them. Generalizing from the L feed to "the subway" is the most common way to get a

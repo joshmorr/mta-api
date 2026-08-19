@@ -20,14 +20,19 @@ type RouteNameSource = {
  * `row` is optional because realtime feeds can name a route that is absent from
  * the static schedule; there the ID is the only label available. That is also
  * why the ID is passed separately rather than read off the row.
+ *
+ * The fallbacks are `||`, not `??`: "blank" reaches the DB as an empty string
+ * rather than NULL whenever the feed ships an empty CSV field, which is how
+ * every MNR route publishes `route_short_name` (`3,1,,New Haven,...`). `??`
+ * would pass that `""` straight through and name every MNR route "".
  */
 export function toRouteNames(
   routeId: string,
   row?: RouteNameSource,
 ): { route_name: string; route_long_name: string } {
   return {
-    route_name:      row?.route_short_name ?? row?.route_long_name ?? routeId,
-    route_long_name: row?.route_long_name  ?? row?.route_short_name ?? routeId,
+    route_name:      row?.route_short_name || row?.route_long_name  || routeId,
+    route_long_name: row?.route_long_name  || row?.route_short_name || routeId,
   };
 }
 

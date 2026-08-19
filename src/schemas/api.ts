@@ -162,6 +162,16 @@ export const VehicleResponseSchema = z.object({
   current_stop_id: z.string(),
   status: z.enum(['INCOMING_AT', 'STOPPED_AT', 'IN_TRANSIT_TO']),
   timestamp: z.number(),
+  latitude: z.number().nullable().openapi({
+    description: 'Vehicle latitude. LIRR only - always null on subway and Metro-North, which ' +
+      "don't reliably publish coordinates.",
+    example: 40.749,
+  }),
+  longitude: z.number().nullable().openapi({
+    description: 'Vehicle longitude. LIRR only - always null on subway and Metro-North, which ' +
+      "don't reliably publish coordinates.",
+    example: -73.99,
+  }),
 }).openapi('Vehicle');
 
 export const VehicleListResponseSchema = z.object({

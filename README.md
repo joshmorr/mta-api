@@ -503,27 +503,31 @@ Live vehicle positions for a route. `route` and `feed` are required.
 | `feed` | string | **required** | One of `subway`, `lirr`, `mnr` |
 
 ```
-GET /vehicles?route=L&feed=subway
+GET /vehicles?route=4&feed=lirr
 ```
 
 ```json
 {
-  "feed_id": "subway",
-  "route_id": "L",
-  "route_name": "L",
-  "route_long_name": "14 St-Canarsie Local",
+  "feed_id": "lirr",
+  "route_id": "4",
+  "route_name": "Ronkonkoma Branch",
+  "route_long_name": "Ronkonkoma Branch",
   "generated_at": 1773605400,
   "vehicles": [
     {
-      "feed_id": "subway",
+      "feed_id": "lirr",
       "trip_id": "...",
-      "current_stop_id": "L06N",
-      "status": "STOPPED_AT",
-      "timestamp": 1773605390
+      "current_stop_id": "349",
+      "status": "IN_TRANSIT_TO",
+      "timestamp": 1773605390,
+      "latitude": 40.749,
+      "longitude": -73.99
     }
   ]
 }
 ```
+
+`latitude`/`longitude` are only populated for LIRR; Metro-North doesn't publish coordinates reliably and subway never does.
 
 ---
 

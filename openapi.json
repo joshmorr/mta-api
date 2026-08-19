@@ -540,6 +540,18 @@
           },
           "timestamp": {
             "type": "number"
+          },
+          "latitude": {
+            "type": "number",
+            "nullable": true,
+            "description": "Vehicle latitude. LIRR only - always null on subway and Metro-North, which don't reliably publish coordinates.",
+            "example": 40.749
+          },
+          "longitude": {
+            "type": "number",
+            "nullable": true,
+            "description": "Vehicle longitude. LIRR only - always null on subway and Metro-North, which don't reliably publish coordinates.",
+            "example": -73.99
           }
         },
         "required": [
@@ -547,7 +559,9 @@
           "trip_id",
           "current_stop_id",
           "status",
-          "timestamp"
+          "timestamp",
+          "latitude",
+          "longitude"
         ]
       },
       "AlertListResponse": {

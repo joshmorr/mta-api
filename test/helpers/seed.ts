@@ -49,9 +49,10 @@ export function seedLirr(): void {
        ('lirr', '1', 'Penn Station',     40.7505, -73.9934, 0, NULL),
        ('lirr', '2', 'Jamaica',          40.7000, -73.8090, 0, NULL)`,
   );
-  // route_short_name is NULL to match production: LIRR and MNR publish only a
-  // long name, so the branch name is the sole rider-facing label. A fixture
-  // that fills in a short name hides every bug in the name-fallback path.
+  // route_short_name is NULL to match production: LIRR publishes only a long
+  // name, so the branch name is the sole rider-facing label. A fixture that
+  // fills in a short name hides every bug in the name-fallback path. MNR is
+  // blank the OTHER way - see seedMnr.
   db.run(
     `INSERT INTO routes (feed_id, route_id, agency_id, route_short_name, route_long_name, route_color, route_type)
      VALUES ('lirr', 'PW', 'LI', NULL, 'Port Washington Branch', '#00985F', 2)`,
@@ -66,9 +67,12 @@ export function seedMnr(): void {
        ('mnr', '1', 'Grand Central',  40.7527, -73.9772, 0, NULL),
        ('mnr', '2', 'Harlem-125 St',  40.8050, -73.9407, 0, NULL)`,
   );
+  // route_short_name is the EMPTY STRING, not NULL, to match production: MNR
+  // ships an empty CSV field (`3,1,,New Haven,...`) where LIRR omits the value
+  // entirely. A NULL here passes a `??` fallback that production data fails.
   db.run(
     `INSERT INTO routes (feed_id, route_id, agency_id, route_short_name, route_long_name, route_color, route_type)
-     VALUES ('mnr', 'HUDSON', 'MNR', NULL, 'Hudson Line', '#009B3A', 2)`,
+     VALUES ('mnr', 'HUDSON', 'MNR', '', 'Hudson Line', '#009B3A', 2)`,
   );
 }
 

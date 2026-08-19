@@ -118,6 +118,22 @@ which reports fill rate per column so you can see which columns exist but are em
 Any schema spanning all three needs those columns nullable, and any "this column is
 missing → the feed is broken" check needs to be per-feed.
 
+**"Blank" arrives as two different values, and `??` only catches one.** A column the feed
+omits entirely imports as `NULL`; a column it ships empty imports as `''`. `routes.txt`
+does both for the same field — LIRR has no `route_short_name` column at all (13/13 rows
+`NULL`) while MNR has one that is empty on every row (6/6 rows `''`):
+
+```csv
+route_id,agency_id,route_short_name,route_long_name,route_desc,route_type,...
+3,1,,New Haven,,2,,EE0034,FFFFFF
+```
+
+So `short_name ?? long_name` names LIRR's routes correctly and names every MNR route
+`""`, because `??` falls through `null` but not `''`. Use `||`, or normalize empty
+strings to `NULL` at import. The same trap applies to any MNR column the table above
+marks "empty on every row", and to `parent_station` and `zone_id` in its `stops.txt`.
+Verified against `gtfsmnr.zip` 2026-08-18.
+
 **Subway platform rows leave `location_type` blank** rather than writing the explicit `0`
 the spec permits:
 
