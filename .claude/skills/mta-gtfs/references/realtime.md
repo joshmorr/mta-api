@@ -86,7 +86,7 @@ Percentages are of the relevant parent objects: trip fields over `TripUpdate`s,
 | `lirr/gtfs-lirr` | 2.0 | 192 | 127 | 65 | – | 100% | 100% | 100% | 87% | – | **100%** | 100% | 100% | 100% | 0 |
 | `mnr/gtfs-mnr` | 1 | 201 | 201 | 201 | 100% | – | – | – | 7% | – | 21% | 21% | 19% | 100% | **201** |
 
-Read across it and four things fall out:
+Read across it and five things fall out:
 
 **The L is a different producer from the rest of the subway.** It is the only NYCT feed
 with `stop_sequence`, `arrival.delay`, `uncertainty`, `schedule_relationship`, or
@@ -102,10 +102,29 @@ separate entities; MNR packs both into one (201 entities, 201 of each). Code tha
 trains by counting entities gets a different answer per feed, and code that resolves a
 trip's vehicle through a cross-entity index finds nothing on MNR.
 
-**Coordinates are not uniform.** LIRR publishes real lat/lon on every vehicle; MNR on
-~21%; no subway feed publishes any. Subway position is only expressible as
-`current_status` relative to `stop_id` (`INCOMING_AT`/`STOPPED_AT`/`IN_TRANSIT_TO`) —
-enough for "arriving", not enough for a map dot.
+**Coordinates are not uniform.** LIRR publishes real lat/lon on every vehicle; MNR on a
+shifting minority (21% on 2026-08-16, 36% on 2026-08-18 — treat the fraction as drifting,
+the partiality as structural); no subway feed publishes any. Subway position is only
+expressible as `current_status` relative to `stop_id`
+(`INCOMING_AT`/`STOPPED_AT`/`IN_TRANSIT_TO`) — enough for "arriving", not enough for a
+map dot.
+
+**Only the subway says which route a vehicle is on.** `route_id` is set on every subway
+`VehiclePosition.trip` and on *no* LIRR or MNR one — measured 2026-08-18:
+
+| Feed | on `vehicle.trip` | via same-entity `TripUpdate` | via cross-entity map on trip ID |
+|---|---:|---:|---:|
+| `nyct/gtfs-ace` | **67/67** | 0/67 | 67/67 |
+| `lirr/gtfs-lirr` | 0/64 | 0/64 | **64/64** |
+| `mnr/gtfs-mnr` | 0/91 | **91/91** | 0/91 |
+
+`TripUpdate.trip.routeId`, by contrast, is populated on all three (115/115, 91/91,
+67/67), so the route always exists somewhere in the message — just not on the vehicle.
+Filtering vehicles by their own `route_id` therefore returns nothing at all on the two
+railroads, which reads as "no trains running" rather than as a bug. Recovering it needs
+the *same* per-feed split as resolving a trip's vehicle (below): same-entity first for
+MNR, then the cross-entity trip-ID map for LIRR. Note the two railroads are mutually
+exclusive here — neither join alone covers both.
 
 ## Per-feed notes
 
@@ -128,7 +147,9 @@ enough for "arriving", not enough for a map dot.
 - The most complete feed of the three: coordinates, train numbers, `stop_sequence`,
   `delay`, and a meaningful `direction_id` (observed 63× `0` / 64× `1`).
 - `direction_id` appears on `TripUpdate.trip` but **not** on `VehiclePosition.trip`
-  (0/65) — same feed, same trip, different descriptor.
+  (0/65) — same feed, same trip, different descriptor. `route_id` splits the same way
+  (0/64 on vehicles, 115/115 on trip updates), so treat LIRR's `VehiclePosition.trip` as
+  carrying a trip ID and nothing else you can rely on.
 - Vehicle entities are keyed `"<trip_id>_V"` (`GO201_26_7713_V`), and
   `vehicle.vehicle.id` is `"<label>_<trip suffix>"` (`7765_7713`) while
   `vehicle.vehicle.label` is the train number (`7765`).
@@ -143,6 +164,10 @@ enough for "arriving", not enough for a map dot.
   feature degrades to "this train exists and reported at time T" ~80% of the time.
 - Observed `current_status` values include `0` (`INCOMING_AT`) on 11 entities — a live
   example of why presence, not truthiness, is the only correct test.
+- `VehiclePosition.trip` carries no `route_id` either (0/91). Because MNR packs both
+  payloads onto one entity, the fix is local — read `entity.tripUpdate.trip.routeId`
+  (91/91) — but the cross-entity trip-ID map that works for LIRR resolves 0/91 here,
+  since the two descriptors' trip IDs disagree.
 - The trip descriptors inside a single entity disagree; see `identifiers.md`.
 
 ## Service alerts
