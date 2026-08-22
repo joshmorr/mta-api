@@ -3,6 +3,7 @@ import { join } from 'path';
 import type { FeedMessage } from '../types/gtfs';
 import { MTA_RT_BASE, getRtCacheTtlMs } from '../services/feed.service';
 import { config } from '../config';
+import { log } from '../utils/logger';
 
 interface CacheEntry {
   feedMessage: FeedMessage;
@@ -14,6 +15,26 @@ let feedMessageTypePromise: Promise<protobuf.Type> | undefined;
 
 const cache = new Map<string, CacheEntry>();
 const pending = new Map<string, Promise<FeedMessage>>();
+
+// Feed paths currently known to be failing upstream. With a 10s TTL a broken
+// feed would otherwise log on nearly every request, so only the transitions
+// into and out of degraded state are recorded — that's the signal worth
+// alerting on ("ACE has been down for 20 minutes"), not the per-request noise.
+const degraded = new Set<string>();
+
+function markDegraded(feedPath: string, err: unknown, servingStale: boolean): void {
+  if (degraded.has(feedPath)) return;
+  degraded.add(feedPath);
+  log.error(
+    { err, feedPath, serving_stale: servingStale },
+    servingStale ? 'feed degraded, serving stale cache' : 'feed degraded, no cache to fall back on',
+  );
+}
+
+function markRecovered(feedPath: string): void {
+  if (!degraded.delete(feedPath)) return;
+  log.info({ feedPath }, 'feed recovered');
+}
 
 function getFeedMessageType(): Promise<protobuf.Type> {
   if (FeedMessageType) return Promise.resolve(FeedMessageType);
@@ -46,6 +67,7 @@ async function fetchAndParse(feedPath: string): Promise<FeedMessage> {
   const type = await getFeedMessageType();
   const msg = type.decode(new Uint8Array(buffer)) as unknown as FeedMessage;
   cache.set(feedPath, { feedMessage: msg, fetchedAt: Date.now() });
+  markRecovered(feedPath);
   return msg;
 }
 
@@ -53,6 +75,7 @@ async function fetchAndParse(feedPath: string): Promise<FeedMessage> {
 export function __resetRtCacheForTests(): void {
   cache.clear();
   pending.clear();
+  degraded.clear();
 }
 
 export async function getFeed(feedPath: string): Promise<{ feedMessage: FeedMessage; stale: boolean; feed_error?: string }> {
@@ -78,6 +101,7 @@ export async function getFeed(feedPath: string): Promise<{ feedMessage: FeedMess
     const feedMessage = await promise;
     return { feedMessage, stale: false };
   } catch (err) {
+    markDegraded(feedPath, err, cached !== undefined);
     if (cached) {
       return {
         feedMessage: cached.feedMessage,

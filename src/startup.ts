@@ -1,6 +1,7 @@
 import { runMigrations } from './db/client';
 import { isDbEmpty } from './services/static.service';
 import { refreshHealthCache } from './services/healthCache';
+import { log } from './utils/logger';
 
 export async function startup() {
   runMigrations();
@@ -8,9 +9,9 @@ export async function startup() {
   refreshHealthCache();
 
   if (isDbEmpty()) {
-    console.error(
-      '[startup] DB is empty — run `bun run seed` to build it locally, or provide ' +
-      'a prebuilt DB via DB_URL/start.sh; see README.',
+    log.fatal(
+      'DB is empty — run `bun run seed` to build it locally, or provide '
+      + 'a prebuilt DB via DB_URL/start.sh; see README.',
     );
     process.exit(1);
   }

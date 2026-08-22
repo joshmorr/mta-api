@@ -1,6 +1,7 @@
 import { createRoute, z } from '@hono/zod-openapi';
 import { getVehiclesForRoute, NotFoundError } from '../services/realtime.service';
 import { createApiRouter } from '../utils/openapi';
+import { log } from '../utils/logger';
 import { VehicleListResponseSchema, ErrorSchema } from '../schemas/api';
 
 export const vehiclesRouter = createApiRouter();
@@ -36,6 +37,7 @@ vehiclesRouter.openapi(getVehiclesRoute, async (c) => {
     if (err instanceof NotFoundError) {
       return c.json({ error: err.message, code: 'NOT_FOUND' }, 404 as const);
     }
+    log.error({ err, route: routeId, feed: feedId }, 'vehicles feed unavailable');
     return c.json({ error: 'Feed unavailable', code: 'FEED_ERROR' }, 503 as const);
   }
 });

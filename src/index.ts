@@ -1,6 +1,5 @@
 import { OpenAPIHono } from '@hono/zod-openapi';
 import { swaggerUI } from '@hono/swagger-ui';
-import { logger } from 'hono/logger';
 import { timing } from 'hono/timing';
 import { config } from './config';
 import { startup } from './startup';
@@ -19,16 +18,20 @@ import { cacheHeaders } from './middleware/cacheHeaders';
 import { openApiDocConfig, normalizeOpenApiPaths } from './openapi';
 import { createMcpHandler } from '@modelcontextprotocol/server';
 import { buildMcpServer } from './mcp/server';
+import { log } from './utils/logger';
+import { requestLogger } from './middleware/requestLogger';
 
 const app = new OpenAPIHono();
 
-app.use('*', logger());
+app.use('*', requestLogger);
 app.use('*', timing());
 app.use('*', cacheHeaders);
 app.use('*', rateLimit);
 
 app.onError((err, c) => {
-  console.error(err);
+  // The access log records the 500, but not *which* request produced it, so
+  // carry the request identity alongside the stack.
+  log.error({ err, method: c.req.method, path: c.req.path }, 'unhandled error');
   return c.json({ error: 'Internal server error', code: 'INTERNAL' }, 500);
 });
 
@@ -54,14 +57,14 @@ app.get('/ui', swaggerUI({ url: '/doc' }));
 // Deliberately outside the OpenAPI document: /doc describes the REST surface,
 // and an MCP client discovers this endpoint's capabilities by handshake.
 const mcp = createMcpHandler(buildMcpServer, {
-  onerror: (err) => console.error('[mcp]', err),
+  onerror: (err) => log.error({ err, transport: 'http' }, 'mcp error'),
 });
 app.all('/mcp', (c) => mcp.fetch(c.req.raw));
 
 startup()
-  .then(() => console.error(`[startup] Server listening on http://${config.host}:${config.port}`))
+  .then(() => log.info({ host: config.host, port: config.port }, 'server listening'))
   .catch((err) => {
-    console.error('[startup] Fatal error:', err);
+    log.fatal({ err }, 'startup failed');
     process.exit(1);
   });
 
