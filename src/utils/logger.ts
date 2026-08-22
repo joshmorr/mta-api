@@ -20,11 +20,20 @@ const isProduction = process.env.NODE_ENV === 'production';
 // `lat`/`lon` on /stops are a user's physical location. They arrive as query
 // params and would otherwise be written verbatim into the access log, so they
 // are censored at the logger rather than at each call site.
+//
+// The access log records the full request header set, which is useful for
+// debugging and carries nothing sensitive *today* — this API has no auth. The
+// credential headers are censored anyway so that adding auth, or sitting behind
+// a proxy that injects one, can't quietly start writing secrets to the log.
 const REDACT_PATHS = [
   'query.lat',
   'query.lon',
   'req.query.lat',
   'req.query.lon',
+  'req.headers.authorization',
+  'req.headers.cookie',
+  'req.headers["x-api-key"]',
+  'req.headers["proxy-authorization"]',
 ];
 
 export const log = pino(

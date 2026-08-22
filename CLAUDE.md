@@ -76,10 +76,19 @@ Put new logic in a service, not in a handler — a handler-only implementation i
 Constraints worth knowing before editing:
 
 - **`src/mcp/stdio.ts` must not import `src/index.ts`.** That runs `startup()` as an import side effect, which calls `process.exit(1)` on an empty DB — a tool client would just see the subprocess die. It runs `runMigrations()` itself and treats an empty DB as a stderr warning.
-- **Nothing may write to stdout** on the stdio path; that is the JSON-RPC channel. Log to stderr.
+- **Nothing may write to stdout** on the stdio path; that is the JSON-RPC channel. Log to stderr — import `log` from `src/utils/logger.ts`, which is pinned to fd 2. `no-console` is on in `.oxlintrc.json` (exempting that file and `scripts/`) so this can't regress by accident.
 - Tool *input* schemas live in `src/mcp/schemas.ts` and are written fresh — the request schemas in `src/schemas/api.ts` are full of `z.coerce` for query-string parsing, which would wrongly accept a string where MCP delivers a typed number. Response schemas *are* reused from `src/schemas/api.ts` as `outputSchema`.
 - `src/schemas/api.ts` must import `z` from `@hono/zod-openapi`, not from `zod`. `.openapi()` is patched onto the prototype by that package; importing `zod` directly only works if some other module imported `@hono/zod-openapi` first.
 - The MCP endpoint is deliberately absent from `openapi.json` — `/doc` describes the REST surface, and MCP clients discover capabilities by handshake. Adding a tool does not require `bun run openapi:dump`.
+
+### Logging
+
+One pino instance, `src/utils/logger.ts`, exported as `log`. **No other module may call `pino()`** — pino's default destination is stdout, which is the MCP stdio JSON-RPC channel, so the module binds fd 2 and everything else imports from it. JSON in production; `pino-pretty` when `NODE_ENV !== 'production'`.
+
+- `LOG_LEVEL` (`debug`/`info`/`warn`/`error`/`silent`) is read in `src/config.ts`. Tests default it to `silent` in `test/setup.ts`; `LOG_LEVEL=debug bun test` overrides.
+- The access log is `src/middleware/requestLogger.ts` (hono-pino), one line per request with `reqId`, status and `responseTime`. It skips `/health` — Fly probes it every 15s. hono-pino drops the query string, so that middleware re-attaches the params with `lat`/`lon` censored; the logger also redacts them defensively.
+- `src/cache/rtCache.ts` logs feed *transitions* (degraded/recovered), not per-request failures — a 10s TTL would make the latter unreadable.
+- `scripts/` deliberately still use `console.error`: they're one-shot CLI tools whose human-readable output is the point.
 
 ### Key patterns
 
