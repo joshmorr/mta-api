@@ -13,7 +13,7 @@
  * production, where Fly ingests the JSON lines directly.
  */
 import pino from 'pino';
-import { config } from '../config';
+import { config, LOG_LEVELS } from '../config';
 
 const isProduction = process.env.NODE_ENV === 'production';
 
@@ -51,6 +51,16 @@ export const log = pino(
   // (dev), pino owns the stream and pino-pretty is told `destination: 2` above.
   isProduction ? pino.destination(2) : undefined,
 );
+
+// Reported here rather than in config.ts, which has no logger to call — and
+// deliberately at warn, not fatal: the point of the fallback is that a bad
+// logging knob doesn't stop the server from starting.
+if (config.invalidLogLevel !== undefined) {
+  log.warn(
+    { value: config.invalidLogLevel, valid: LOG_LEVELS, using: config.logLevel },
+    'unrecognized LOG_LEVEL — falling back to the default',
+  );
+}
 
 /**
  * Normalizes a caught `unknown` into something the `err` serializer renders
