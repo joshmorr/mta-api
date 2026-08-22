@@ -85,7 +85,7 @@ Constraints worth knowing before editing:
 
 One pino instance, `src/utils/logger.ts`, exported as `log`. **No other module may call `pino()`** — pino's default destination is stdout, which is the MCP stdio JSON-RPC channel, so the module binds fd 2 and everything else imports from it. JSON in production; `pino-pretty` when `NODE_ENV !== 'production'`.
 
-- `LOG_LEVEL` (`debug`/`info`/`warn`/`error`/`silent`) is read in `src/config.ts`. Tests default it to `silent` in `test/setup.ts`; `LOG_LEVEL=debug bun test` overrides.
+- `LOG_LEVEL` (`info`/`warn`/`error`/`silent`) is read in `src/config.ts`. Tests default it to `silent` in `test/setup.ts`; `LOG_LEVEL=info bun test` overrides.
 - The access log is `src/middleware/requestLogger.ts` (hono-pino), one line per request with `reqId`, status and `responseTime`. It skips `/health` — Fly probes it every 15s. hono-pino drops the query string, so that middleware re-attaches the params with `lat`/`lon` censored; the logger also redacts them defensively.
 - `src/cache/rtCache.ts` logs feed *transitions* (degraded/recovered), not per-request failures — a 10s TTL would make the latter unreadable.
 - `scripts/` deliberately still use `console.error`: they're one-shot CLI tools whose human-readable output is the point.

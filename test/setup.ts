@@ -5,7 +5,7 @@ process.env.DB_PATH = ':memory:';
 
 // Several suites deliberately exercise upstream-failure paths, which now log at
 // error level — that would bury the test output. Silence the logger unless the
-// developer asked for it explicitly (`LOG_LEVEL=debug bun test`).
+// developer asked for it explicitly (`LOG_LEVEL=info bun test`).
 process.env.LOG_LEVEL ??= 'silent';
 
 const { runMigrations } = await import('../src/db/client');

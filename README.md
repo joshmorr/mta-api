@@ -49,7 +49,7 @@ All options are environment variables. Defaults work out of the box.
 | `STATIC_FETCH_TIMEOUT_MS` | `60000` | Upstream static GTFS ZIP fetch timeout in milliseconds (used by `bun run seed` and CI) |
 | `DB_URL` | _(unset)_ | Bucket base URL to download a prebuilt `mta.db` from on boot (see Deployment). When unset, no download happens |
 | `DB_FETCH_TIMEOUT_MS` | `120000` | Timeout for the boot-time DB download |
-| `LOG_LEVEL` | `info` | Log verbosity: `debug`, `info`, `warn`, `error`, `silent` |
+| `LOG_LEVEL` | `info` | Log verbosity: `info`, `warn`, `error`, `silent` |
 
 ---
 
