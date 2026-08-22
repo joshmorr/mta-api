@@ -1,5 +1,6 @@
 import { Database } from 'bun:sqlite';
 import { config } from '../config';
+import { log } from '../utils/logger';
 import {
   CREATE_STOPS,
   CREATE_ROUTES,
@@ -115,11 +116,11 @@ export function runMigrations(opts: { allowDestructiveRebuild?: boolean } = {}) 
     if (opts.allowDestructiveRebuild) {
       recreateStaticTables();
     } else {
-      console.error(
-        '[migrations] WARNING: existing schema is missing columns the current code ' +
-        'expects (stops.feed_id / stop_times.departure_seconds / trips.trip_headsign). ' +
-        'Refusing to drop existing data outside `bun run seed` — queries touching the ' +
-        'missing column(s) will fail until a DB built from the current schema is loaded.',
+      log.warn(
+        'existing schema is missing columns the current code expects '
+        + '(stops.feed_id / stop_times.departure_seconds / trips.trip_headsign). '
+        + 'Refusing to drop existing data outside `bun run seed` — queries touching the '
+        + 'missing column(s) will fail until a DB built from the current schema is loaded.',
       );
     }
   }
@@ -142,10 +143,7 @@ export function runMigrations(opts: { allowDestructiveRebuild?: boolean } = {}) 
     try {
       db.run(idx);
     } catch (err) {
-      console.error(
-        `[migrations] WARNING: skipping index — existing schema does not support it: ${idx} ` +
-        `(${err instanceof Error ? err.message : String(err)})`,
-      );
+      log.warn({ err, index: idx }, 'skipping index — existing schema does not support it');
     }
   }
 }

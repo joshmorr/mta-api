@@ -1,6 +1,7 @@
 import { createRoute, z } from '@hono/zod-openapi';
 import { getArrivalsForStop, NotFoundError } from '../services/realtime.service';
 import { createApiRouter } from '../utils/openapi';
+import { log } from '../utils/logger';
 import { ArrivalResponseSchema, ErrorSchema } from '../schemas/api';
 
 export const arrivalsRouter = createApiRouter();
@@ -43,6 +44,9 @@ arrivalsRouter.openapi(getArrivalsRoute, async (c) => {
     if (err instanceof NotFoundError) {
       return c.json({ error: err.message, code: 'NOT_FOUND' }, 404 as const);
     }
+    // The client gets an opaque 503; without this the reason an upstream feed
+    // is failing never reaches the logs at all.
+    log.error({ err, stop: stopId, feed: feedId }, 'arrivals feed unavailable');
     return c.json({ error: 'Feed unavailable', code: 'FEED_ERROR' }, 503 as const);
   }
 });

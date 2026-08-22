@@ -13,6 +13,7 @@ import { toRouteNames } from './routes.service';
 import { findStopsById, getParentId, getStopNamesByIds } from '../db/queries/stops';
 import { nonEmpty, railroadStopTime, toNumber } from '../utils/realtime';
 import { getRelevantServiceDates } from '../utils/serviceDate';
+import { log } from '../utils/logger';
 
 // VehicleStopStatus is a proto enum; protobufjs decodes it as an int.
 // Map back to the string union our API contract returns.
@@ -150,6 +151,9 @@ export async function getArrivalsForStop(
     try {
       ({ feedMessage, stale, feed_error } = await getFeed(feedPath));
     } catch (err) {
+      // One feed of several can fail while the request still succeeds on the
+      // rest, so this never surfaces as a 503 — it would otherwise be silent.
+      log.warn({ err, feedPath, stop: stopId }, 'feed fetch failed, skipping');
       overallStale = true;
       overallFeedError = err instanceof Error ? err.message : 'Feed unavailable';
       continue;

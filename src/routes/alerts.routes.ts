@@ -1,6 +1,7 @@
 import { createRoute, z } from '@hono/zod-openapi';
 import { getAlerts, parseDirection } from '../services/alerts.service';
 import { createApiRouter } from '../utils/openapi';
+import { log } from '../utils/logger';
 import { AlertListResponseSchema, ErrorSchema } from '../schemas/api';
 
 export const alertsRouter = createApiRouter();
@@ -47,7 +48,8 @@ alertsRouter.openapi(getAlertsRoute, async (c) => {
       ...(feed_error ? { feed_error } : {}),
       alerts,
     }, 200 as const);
-  } catch {
+  } catch (err) {
+    log.error({ err, routes, stop: stopId }, 'alerts feed unavailable');
     return c.json({ error: 'Alerts feed unavailable', code: 'FEED_ERROR' }, 503 as const);
   }
 });

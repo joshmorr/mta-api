@@ -21,18 +21,20 @@ import { runMigrations } from '../db/client';
 import { isDbEmpty } from '../services/static.service';
 import { config } from '../config';
 import { buildMcpServer } from './server';
+import { log } from '../utils/logger';
 
 runMigrations();
 
 if (isDbEmpty()) {
-  console.error(
-    `[mcp] Warning: the DB at ${config.dbPath} is empty — schedule lookups will return nothing. ` +
-    'Run `bun run seed` to build it locally, or set DB_URL and run scripts/fetch-db.ts.',
+  log.warn(
+    { db: config.dbPath },
+    'DB is empty — schedule lookups will return nothing. Run `bun run seed` to '
+    + 'build it locally, or set DB_URL and run scripts/fetch-db.ts.',
   );
 }
 
 serveStdio(buildMcpServer, {
-  onerror: (err) => console.error('[mcp]', err),
+  onerror: (err) => log.error({ err, transport: 'stdio' }, 'mcp error'),
 });
 
-console.error(`[mcp] mta-mcp-server ready on stdio (db: ${config.dbPath})`);
+log.info({ db: config.dbPath }, 'mta-mcp-server ready on stdio');

@@ -24,6 +24,7 @@ import type {
   GtfsCalendarDate,
   GtfsTransfer,
 } from '../types/gtfs';
+import { log } from '../utils/logger';
 
 const SUBWAY_URL = 'https://rrgtfsfeeds.s3.amazonaws.com/gtfs_supplemented.zip';
 const LIRR_URL   = 'https://rrgtfsfeeds.s3.amazonaws.com/gtfslirr.zip';
@@ -49,7 +50,7 @@ function extractAndParse(files: Record<string, Uint8Array>, name: string): unkno
 }
 
 async function syncFeed(url: string, feedId: FeedId) {
-  console.error(`[staticFeed] Syncing ${feedId}...`);
+  log.info({ feed: feedId }, 'syncing static feed');
   const buffer = await fetch(url, {
     signal: AbortSignal.timeout(config.staticFetchTimeoutMs),
   }).then((r) => {
@@ -114,7 +115,7 @@ async function syncFeed(url: string, feedId: FeedId) {
   transferRows = null!;
 
   setFeedMeta(feedId);
-  console.error(`[staticFeed] ${feedId} synced. stops=${counts.stops} routes=${counts.routes} trips=${counts.trips} stop_times=${counts.stop_times} calendar_dates=${counts.calendar_dates} transfers=${counts.transfers}`);
+  log.info({ feed: feedId, ...counts }, 'static feed synced');
 }
 
 export async function syncSubwayFeed() {
