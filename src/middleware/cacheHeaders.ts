@@ -7,8 +7,11 @@ import type { MiddlewareHandler } from 'hono';
  * cache TTL, static data changes at most daily — so short shared caching with
  * `stale-while-revalidate` is safe and keeps origin load flat as traffic grows.
  *
- * Only 2xx GETs are tagged; errors (400/404/429/503) and the seeding gate must
- * never be cached, so they are left with no caching directive.
+ * Only 200 and 304 GETs are tagged; errors (400/404/429/503) and the seeding
+ * gate must never be cached, so they are left with no caching directive. 304 is
+ * included because a conditional GET that revalidates must still refresh the
+ * client's freshness lifetime - without it the stored `max-age` would be
+ * carried over from the original 200 and expire on the old schedule.
  */
 
 // Realtime-backed endpoints (track upstream freshness closely), plus
@@ -37,7 +40,7 @@ export const cacheHeaders: MiddlewareHandler = async (c, next) => {
   await next();
 
   if (c.req.method !== 'GET') return;
-  if (c.res.status !== 200) return;
+  if (c.res.status !== 200 && c.res.status !== 304) return;
   if (c.res.headers.has('Cache-Control')) return;
 
   const value = cacheControlFor(c.req.path);
