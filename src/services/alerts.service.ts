@@ -74,6 +74,28 @@ export async function fetchAlerts(): Promise<{
   return { generated_at, stale, feed_error, alerts };
 }
 
+/**
+ * The alerts snapshot's own publish timestamp, without decoding a single alert.
+ *
+ * This is the cheap half of `fetchAlerts`: `getFeed` is a cache-map lookup on a
+ * hit, and `header.timestamp` is the value the feed itself stamps, so a caller
+ * can decide whether anything changed before paying for the entity walk, the
+ * Mercury parsing and serializing the largest payload in the system
+ * (`camsys/all-alerts` runs 570-585 KB against a publish interval measured in
+ * minutes). `HTTP /alerts` uses it to answer a conditional GET with a 304.
+ *
+ * `stale` is passed through so callers can decline to report "unchanged" while
+ * upstream is broken - the timestamp is frozen precisely *because* nothing new
+ * is arriving, which is the opposite of what a 304 tells a client.
+ */
+export async function getAlertsSnapshotTimestamp(): Promise<{
+  generated_at: number;
+  stale: boolean;
+}> {
+  const { feedMessage, stale } = await getFeed(ALERTS_FEED_PATH);
+  return { generated_at: toNumber(feedMessage.header.timestamp), stale };
+}
+
 export interface AlertFilter {
   routes?: string[];
   stopId?: string;

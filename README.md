@@ -581,6 +581,31 @@ Each `informed_entity` entry is an independent selector — fields within one en
 
 `human_readable_active_period` is the MTA's own prose summary of `active_periods`, worth preferring over rendering the raw timestamps. Any of the four is `null` on an alert that doesn't carry the extension.
 
+#### Polling cheaply with `If-None-Match`
+
+This is the largest response the API serves (~430KB, 350 alerts at the time of writing) against a feed that republishes on the order of *minutes*, so a poller re-downloading it every few seconds is almost always fetching bytes it already has.
+
+Every `200` carries a weak `ETag`. Send it back as `If-None-Match` and an unchanged snapshot answers `304 Not Modified` with an empty body:
+
+```
+$ curl -sD- -o/dev/null http://localhost:3000/alerts | grep -i etag
+ETag: W/"1788230241-31xea34rk7nur"
+
+$ curl -sD- -o/dev/null -H 'If-None-Match: W/"1788230241-31xea34rk7nur"' http://localhost:3000/alerts
+HTTP/1.1 304 Not Modified
+ETag: W/"1788230241-31xea34rk7nur"
+Content-Length: 0
+```
+
+The validator is derived from the feed's own publish timestamp plus your query parameters, not from a hash of the body — so the match is decided *before* the alert list is built, and a `304` costs the server about an order of magnitude less than a `200` (~0.2ms vs ~2.5ms on a warm cache) rather than merely saving bandwidth.
+
+Two things worth knowing:
+
+- The ETag is scoped to the exact query. An ETag from `/alerts?routes=A` will not produce a `304` against `/alerts` — that would hand you a response you never fetched.
+- A degraded upstream **never** returns `304`. The feed timestamp stops moving precisely because nothing is being published, so a conditional request during an outage still returns `200` with `stale: true` and `feed_error` set, and you keep seeing the degradation.
+
+`304`s still count against the per-IP rate limit (`RATE_LIMIT_MAX`, see [Configuration](#configuration)) — conditional requests make each poll cheaper, not free.
+
 
 ---
 

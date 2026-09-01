@@ -1,6 +1,12 @@
 import { describe, expect, it, mock, afterEach, afterAll } from 'bun:test';
-import { fetchAlerts, getAlerts, parseDirection } from '../../src/services/alerts.service';
+import {
+  fetchAlerts,
+  getAlerts,
+  getAlertsSnapshotTimestamp,
+  parseDirection,
+} from '../../src/services/alerts.service';
 import { encodeFeedMessage } from '../helpers/rt';
+import { __resetRtCacheForTests } from '../../src/cache/rtCache';
 
 const realFetch = globalThis.fetch;
 const realDateNow = Date.now;
@@ -362,5 +368,89 @@ describe('Mercury alert extension', () => {
     expect(a.priority).toBeNull();
     expect(a.human_readable_active_period).toBeNull();
     expect(a.updated_at).toBeNull();
+  });
+});
+
+describe('getAlertsSnapshotTimestamp', () => {
+  /**
+   * The whole value of this function is that it reads the snapshot's identity
+   * without touching its contents - that is what lets the route answer a
+   * conditional GET without paying for the entity walk. These tests pin that
+   * independence: same header, wildly different entity payloads, same answer.
+   */
+  it('reports the feed header timestamp regardless of what the entities hold', async () => {
+    const header = { gtfsRealtimeVersion: '2.0', timestamp: 1_700_000_500 };
+
+    __resetRtCacheForTests();
+    advanceClock();
+    stubFetch(await encodeFeedMessage({ header, entity: [] }));
+    const empty = await getAlertsSnapshotTimestamp();
+
+    __resetRtCacheForTests();
+    advanceClock();
+    stubFetch(
+      await encodeFeedMessage({
+        header,
+        entity: [
+          {
+            id: 'a1',
+            alert: {
+              activePeriod: [],
+              informedEntity: [{ routeId: 'A' }, { routeId: 'C', stopId: '127', directionId: 1 }],
+              headerText: { translation: [{ text: 'A/C disruption', language: 'en' }] },
+              descriptionText: { translation: [{ text: 'x'.repeat(2000), language: 'en' }] },
+            },
+          },
+          {
+            id: 'a2',
+            alert: {
+              activePeriod: [{ start: 1, end: 2 }],
+              informedEntity: [{ routeId: '1', stopId: '127' }],
+              headerText: { translation: [{ text: '1 train', language: 'en' }] },
+            },
+          },
+        ],
+      }),
+    );
+    const populated = await getAlertsSnapshotTimestamp();
+
+    expect(empty).toEqual({ generated_at: 1_700_000_500, stale: false });
+    expect(populated).toEqual({ generated_at: 1_700_000_500, stale: false });
+  });
+
+  it('agrees with fetchAlerts on the same snapshot', async () => {
+    __resetRtCacheForTests();
+    advanceClock();
+    stubFetch(
+      await encodeFeedMessage({
+        header: { gtfsRealtimeVersion: '2.0', timestamp: 1_700_009_999 },
+        entity: [],
+      }),
+    );
+
+    // Same cache entry serves both, so the probe cannot drift from the payload.
+    const probe = await getAlertsSnapshotTimestamp();
+    const full = await fetchAlerts();
+    expect(probe.generated_at).toBe(full.generated_at);
+  });
+
+  it('surfaces stale when upstream is broken and a snapshot is cached', async () => {
+    __resetRtCacheForTests();
+    advanceClock();
+    stubFetch(
+      await encodeFeedMessage({
+        header: { gtfsRealtimeVersion: '2.0', timestamp: 1_700_001_000 },
+        entity: [],
+      }),
+    );
+    await getAlertsSnapshotTimestamp();
+
+    // Expire the entry, then break upstream: the fallback serves the old
+    // snapshot, so the timestamp is unchanged *because* nothing is arriving.
+    advanceClock();
+    globalThis.fetch = mock(async () => new Response('down', { status: 502 })) as unknown as typeof fetch;
+
+    const result = await getAlertsSnapshotTimestamp();
+    expect(result).toEqual({ generated_at: 1_700_001_000, stale: true });
   });
 });

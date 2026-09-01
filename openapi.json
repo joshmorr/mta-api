@@ -1918,7 +1918,7 @@
         ],
         "operationId": "getAlerts",
         "summary": "Get service alerts",
-        "description": "Returns active MTA service alerts, optionally filtered by route or stop.",
+        "description": "Returns active MTA service alerts, optionally filtered by route or stop.\n\nSupports conditional GET: every 200 carries an `ETag`, and resending it as `If-None-Match` yields `304 Not Modified` while the upstream snapshot is unchanged. This feed publishes on the order of minutes against a much shorter cache TTL, so a polling client will usually revalidate rather than re-download the (large) alert list. A degraded upstream always returns 200 so the `stale` flag stays visible.",
         "parameters": [
           {
             "schema": {
@@ -1958,16 +1958,52 @@
             "description": "Filter alerts by direction of travel at the given stop. N or 0 = Northbound, S or 1 = Southbound. Only applies in combination with stop_id.",
             "name": "direction",
             "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "description": "ETag from a previous response. Matching the current snapshot yields 304.",
+              "example": "W/\"1705330800-1a2b3c4d\""
+            },
+            "required": false,
+            "description": "ETag from a previous response. Matching the current snapshot yields 304.",
+            "name": "if-none-match",
+            "in": "header"
           }
         ],
         "responses": {
           "200": {
             "description": "Service alerts",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string",
+                  "description": "Weak validator for this alerts snapshot. Send it back as If-None-Match to poll cheaply.",
+                  "example": "W/\"1705330800-1a2b3c4d\""
+                },
+                "required": true,
+                "description": "Weak validator for this alerts snapshot. Send it back as If-None-Match to poll cheaply."
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/AlertListResponse"
                 }
+              }
+            }
+          },
+          "304": {
+            "description": "Alerts snapshot unchanged since the supplied If-None-Match",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string",
+                  "description": "Weak validator for this alerts snapshot. Send it back as If-None-Match to poll cheaply.",
+                  "example": "W/\"1705330800-1a2b3c4d\""
+                },
+                "required": true,
+                "description": "Weak validator for this alerts snapshot. Send it back as If-None-Match to poll cheaply."
               }
             }
           },
