@@ -22,11 +22,24 @@ jobs:
   checks:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
 
-      - uses: oven-sh/setup-bun@v2
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
-          bun-version: latest
+          bun-version-file: .bun-version
+
+      # CI and the DB build read the Bun version from .bun-version; the Dockerfile
+      # pins its image separately. Keep them identical: bun:sqlite ships inside
+      # Bun, so the DB is written by one Bun and read by another otherwise.
+      - name: Bun version pin
+        run: |
+          want="$(tr -d '[:space:]' < .bun-version)"
+          bad="$(grep -E '^FROM oven/bun:' Dockerfile | grep -v "^FROM oven/bun:${want}-" || true)"
+          if [ -n "$bad" ]; then
+            echo "::error file=Dockerfile::Dockerfile Bun image doesn't match .bun-version (${want}):"
+            echo "$bad"
+            exit 1
+          fi
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
@@ -65,7 +78,7 @@ jobs:
       group: deploy
       cancel-in-progress: false
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
 
       - name: Set up flyctl
         # Pinned to a full commit SHA, not @master: a mutable ref would run whatever
