@@ -25,8 +25,9 @@ export const config = {
   rateLimitMax,
   // MCP is chattier per unit of work than REST — a session spends 3 requests on
   // the handshake before any data, and an agent turn is routinely several tool
-  // calls. Defaults to 5x the REST ceiling so tuning RATE_LIMIT_MAX carries.
-  mcpRateLimitMax: Number(process.env.MCP_RATE_LIMIT_MAX ?? rateLimitMax * 5),
+  // calls. Batches are refused (src/mcp/http.ts), so a request is at most one
+  // tool call. Defaults to 2x the REST ceiling so tuning RATE_LIMIT_MAX carries.
+  mcpRateLimitMax: Number(process.env.MCP_RATE_LIMIT_MAX ?? rateLimitMax * 2),
   rateLimitWindowMs: Number(process.env.RATE_LIMIT_WINDOW_MS ?? 60_000),
   logLevel: logLevelIsUsable && rawLogLevel ? rawLogLevel : DEFAULT_LOG_LEVEL,
   // Set only when LOG_LEVEL was present but unusable. src/utils/logger.ts reports

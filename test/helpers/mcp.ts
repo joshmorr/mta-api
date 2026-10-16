@@ -1,5 +1,4 @@
-import { createMcpHandler } from '@modelcontextprotocol/server';
-import { buildMcpServer } from '../../src/mcp/server';
+import { createMcpHttpHandler } from '../../src/mcp/http';
 
 export type JsonRpcResult = {
   result?: Record<string, unknown>;
@@ -41,7 +40,7 @@ export interface McpTestClient {
  * single-event SSE stream, so the `data:` payload is unwrapped here.
  */
 export function makeMcpClient(): McpTestClient {
-  const handler = createMcpHandler(buildMcpServer);
+  const handler = createMcpHttpHandler();
 
   async function rpc(method: string, params?: Record<string, unknown>): Promise<JsonRpcResult> {
     const res = await handler.fetch(

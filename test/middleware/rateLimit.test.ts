@@ -111,8 +111,8 @@ describe('rateLimit middleware', () => {
     const app = makeApp();
     const res = await app.request(req('/mcp', ip()));
     expect(res.status).toBe(200);
-    expect(res.headers.get('X-RateLimit-Limit')).toBe('500');
-    expect(res.headers.get('X-RateLimit-Remaining')).toBe('499');
+    expect(res.headers.get('X-RateLimit-Limit')).toBe('200');
+    expect(res.headers.get('X-RateLimit-Remaining')).toBe('199');
   });
 
   it('keeps /mcp and REST budgets in separate buckets for the same IP', async () => {
@@ -124,17 +124,17 @@ describe('rateLimit middleware', () => {
     // MCP is untouched by that.
     const mcp = await app.request(req('/mcp', myIp));
     expect(mcp.status).toBe(200);
-    expect(mcp.headers.get('X-RateLimit-Remaining')).toBe('499');
+    expect(mcp.headers.get('X-RateLimit-Remaining')).toBe('199');
   });
 
   it('returns 429 on /mcp once the MCP ceiling is exceeded', async () => {
     const app = makeApp();
     const myIp = ip();
     let lastStatus = 0;
-    for (let i = 0; i < 500; i++) {
+    for (let i = 0; i < 200; i++) {
       lastStatus = (await app.request(req('/mcp', myIp))).status;
     }
-    expect(lastStatus).toBe(200); // 500th — at the limit, still allowed
+    expect(lastStatus).toBe(200); // 200th — at the limit, still allowed
     const overflow = await app.request(req('/mcp', myIp));
     expect(overflow.status).toBe(429);
     const body = (await overflow.json()) as { code: string };

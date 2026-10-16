@@ -16,8 +16,7 @@ import {
 import { rateLimit } from './middleware/rateLimit';
 import { cacheHeaders } from './middleware/cacheHeaders';
 import { openApiDocConfig, normalizeOpenApiPaths } from './openapi';
-import { createMcpHandler } from '@modelcontextprotocol/server';
-import { buildMcpServer } from './mcp/server';
+import { createMcpHttpHandler } from './mcp/http';
 import { log } from './utils/logger';
 import { requestLogger } from './middleware/requestLogger';
 
@@ -56,9 +55,7 @@ app.get('/ui', swaggerUI({ url: '/doc' }));
 // MCP over streamable HTTP, serving the same tools as the stdio entrypoint.
 // Deliberately outside the OpenAPI document: /doc describes the REST surface,
 // and an MCP client discovers this endpoint's capabilities by handshake.
-const mcp = createMcpHandler(buildMcpServer, {
-  onerror: (err) => log.error({ err, transport: 'http' }, 'mcp error'),
-});
+const mcp = createMcpHttpHandler();
 app.all('/mcp', (c) => mcp.fetch(c.req.raw));
 
 startup()
