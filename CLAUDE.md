@@ -43,7 +43,7 @@ Copy `.env.example` to `.env`. All have defaults so the server starts without on
 | `RT_FETCH_TIMEOUT_MS` | `10000` | Upstream RT fetch timeout (abort) |
 | `STATIC_FETCH_TIMEOUT_MS` | `60000` | Upstream static GTFS zip fetch timeout (abort); used by `bun run seed` and CI |
 | `RATE_LIMIT_MAX` | `100` | Requests per window per client IP (per-instance) |
-| `MCP_RATE_LIMIT_MAX` | `5 × RATE_LIMIT_MAX` | Ceiling for `POST /mcp`, which gets its own per-IP bucket (HTTP transport only) |
+| `MCP_RATE_LIMIT_MAX` | `2 × RATE_LIMIT_MAX` | Ceiling for `POST /mcp`, which gets its own per-IP bucket (HTTP transport only). JSON-RPC batches are refused, so a request is at most one tool call |
 | `RATE_LIMIT_WINDOW_MS` | `60000` | Rate-limit fixed-window length |
 
 ## Architecture
@@ -73,7 +73,7 @@ Put new logic in a service, not in a handler — a handler-only implementation i
 `src/mcp/tools.ts` registers nine read-only tools (the API's entity endpoints minus `/health`) via `registerMtaTools()`. `src/mcp/server.ts` exports the `buildMcpServer()` factory, used by both transports:
 
 - **stdio** — `src/mcp/stdio.ts`, wired as the `mta-mcp` bin and `bun run mcp`. A client launches it as a subprocess.
-- **HTTP** — `POST /mcp` in `src/index.ts`, via the SDK's web-standard fetch face (`createMcpHandler(...).fetch` takes a `Request` and returns a `Response`, so it drops straight into Hono).
+- **HTTP** — `POST /mcp` in `src/index.ts`, via `createMcpHttpHandler()` in `src/mcp/http.ts`: the SDK's web-standard fetch face (`createMcpHandler(...).fetch` takes a `Request` and returns a `Response`, so it drops straight into Hono) behind a guard that refuses JSON-RPC batches. The rate limiter counts requests, and the SDK would otherwise run up to 100 tool calls from one batched POST.
 
 Constraints worth knowing before editing:
 
