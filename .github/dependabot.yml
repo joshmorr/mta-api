@@ -1,0 +1,50 @@
+# Weekly dependency updates. Minor/patch bumps are grouped into one PR per
+# ecosystem; majors arrive as their own PRs. Security updates (enable
+# "Dependabot security updates" in repo settings) are opened as soon as an
+# advisory lands and ignore the cooldown.
+#
+# The 3-day cooldown skips brand-new releases, which is where most malicious
+# npm versions live before they're pulled. Matches minimumReleaseAge in
+# bunfig.toml.
+version: 2
+updates:
+  - package-ecosystem: bun
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 3
+    groups:
+      minor-and-patch:
+        applies-to: version-updates
+        update-types: [minor, patch]
+    commit-message:
+      prefix: chore
+      include: scope
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 3
+    groups:
+      actions:
+        applies-to: version-updates
+        update-types: [minor, patch]
+    commit-message:
+      prefix: ci
+
+  # Bumps the pinned oven/bun image in the Dockerfile. Dependabot does not
+  # touch .bun-version, so a Bun bump PR will fail CI's "Bun version pin"
+  # check until .bun-version is updated to match in the same PR — that's
+  # intentional, so CI, the DB build and production never run different Bun.
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 3
+    commit-message:
+      prefix: chore
+      include: scope

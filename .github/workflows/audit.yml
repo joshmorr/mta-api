@@ -1,0 +1,38 @@
+name: Dependency audit
+
+# Checks bun.lock against the npm advisory database. Runs on PRs that change
+# dependencies (so a vulnerable version can't be merged in) and daily (to catch
+# new advisories against versions already on main). Deliberately not part of
+# ci.yml: an advisory published overnight would otherwise block every unrelated
+# PR and the deploy until it was fixed.
+#
+# Fails on high/critical only. Lower-severity findings are still printed in the
+# log and arrive as Dependabot alerts.
+
+on:
+  pull_request:
+    paths:
+      - bun.lock
+      - package.json
+  schedule:
+    # Daily at 07:17 UTC, ahead of the 08:00 DB build.
+    - cron: '17 7 * * *'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: .bun-version
+
+      # bun audit reads bun.lock directly; no install (and so no dependency
+      # code) needed.
+      - name: Audit dependencies
+        run: bun audit --audit-level=high
