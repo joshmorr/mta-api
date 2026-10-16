@@ -3,7 +3,7 @@
 # "Dependabot security updates" in repo settings) are opened as soon as an
 # advisory lands and ignore the cooldown.
 #
-# The 7-day cooldown skips brand-new releases, which is where most malicious
+# The 3-day cooldown skips brand-new releases, which is where most malicious
 # npm versions live before they're pulled. Matches minimumReleaseAge in
 # bunfig.toml.
 version: 2
@@ -13,7 +13,7 @@ updates:
     schedule:
       interval: weekly
     cooldown:
-      default-days: 7
+      default-days: 3
     groups:
       minor-and-patch:
         applies-to: version-updates
@@ -27,7 +27,7 @@ updates:
     schedule:
       interval: weekly
     cooldown:
-      default-days: 7
+      default-days: 3
     groups:
       actions:
         applies-to: version-updates
@@ -44,7 +44,7 @@ updates:
     schedule:
       interval: weekly
     cooldown:
-      default-days: 7
+      default-days: 3
     commit-message:
       prefix: chore
       include: scope

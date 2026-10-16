@@ -25,7 +25,7 @@ bun run test:hurl:all # ^ plus realtime smoke (hits live MTA feeds)
 
 Type-check: `bunx tsc --noEmit` (no build script wired up for this).
 
-The Bun version is pinned in `.bun-version` (read by both workflows) and in the Dockerfile's `FROM` lines (by tag and digest); CI fails if they differ. Bump both together. `bunfig.toml` sets `minimumReleaseAge` to 7 days, so `bun add`/`bun update` won't pick a version published more recently than that. Dependabot (`.github/dependabot.yml`) opens weekly update PRs with the same cooldown, and `.github/workflows/audit.yml` runs `bun audit` daily and on PRs that touch dependencies.
+The Bun version is pinned in `.bun-version` (read by both workflows) and in the Dockerfile's `FROM` lines (by tag and digest); CI fails if they differ. Bump both together. `bunfig.toml` sets `minimumReleaseAge` to 3 days (override one install with `--minimum-release-age=0`, e.g. for an urgent security fix), so `bun add`/`bun update` won't pick a version published more recently than that. Dependabot (`.github/dependabot.yml`) opens weekly update PRs with the same cooldown, and `.github/workflows/audit.yml` runs `bun audit` daily and on PRs that touch dependencies.
 
 `hurl` is a separate binary (not a package dep) — install from <https://hurl.dev>. The `test/e2e/` suites test the real HTTP surface (status codes, `{error,code}` envelope, headers) that in-process `bun:test` can't reach; see `test/e2e/README.md`.
 
