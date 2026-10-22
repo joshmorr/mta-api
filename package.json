@@ -36,6 +36,6 @@
     "oxlint": "^1.88.0",
     "pino-pretty": "^13.2.0",
     "swagger-ui-dist": "^5.33.2",
-    "typescript": "5.9.3"
+    "typescript": "7.0.2"
   }
 }
